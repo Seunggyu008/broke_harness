@@ -1,0 +1,192 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "share": "manual",
+
+  "model": "opencode-go/kimi-k2.6",
+  "small_model": "opencode-go/deepseek-v4.1-flash",
+
+  "instructions": ["AGENTS.md", "docs/INDEX.md"],
+
+  "watcher": {
+    "ignore": [
+      ".git/**",
+      ".tmp/**",
+      "**/node_modules/**",
+      "**/.expo/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/bin/**",
+      "**/obj/**",
+      "**/coverage/**",
+    ],
+  },
+
+  "formatter": {
+    "eslint": {
+      "command": [
+        "node",
+        ".opencode/scripts/run-formatter.mjs",
+        "eslint",
+        "$FILE",
+      ],
+      "extensions": [
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".cjs",
+        ".mjs",
+        ".cts",
+        ".mts",
+      ],
+    },
+    "prettier": {
+      "command": [
+        "node",
+        ".opencode/scripts/run-formatter.mjs",
+        "prettier",
+        "$FILE",
+      ],
+      "extensions": [
+        ".json",
+        ".jsonc",
+        ".md",
+        ".css",
+        ".html",
+        ".yaml",
+        ".yml",
+      ],
+    },
+  },
+
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+    },
+    "argent": {
+      "type": "local",
+      "command": ["cmd", "/c", "argent", "mcp"],
+      "environment": {
+        // OpenCode may start without the user npm binaries on PATH.
+        "PATH": "{env:APPDATA}\\npm;{env:PATH}",
+      },
+      "enabled": true,
+      "timeout": 30000,
+    },
+  },
+
+  "permission": {
+    "edit": "ask",
+    "bash": {
+      "*": "ask",
+
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+
+      "npm test*": "allow",
+      "npm run test*": "allow",
+      "npm run lint*": "allow",
+      "npm run smoke*": "allow",
+      "npm run typecheck*": "allow",
+      "dotnet build*": "allow",
+      "dotnet test*": "allow",
+
+      "git push*": "deny",
+      "rm -rf *": "deny",
+      "del *": "ask",
+      "rmdir *": "ask",
+    },
+  },
+
+  "agent": {
+    "plan": {
+      "mode": "primary",
+      "model": "opencode/muse-spark-1.3-contributor-free",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "bash": "ask",
+      },
+    },
+
+    "build": {
+      "mode": "primary",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "temperature": 0.1,
+      "steps": 80,
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "npm test*": "allow",
+          "npm run test*": "allow",
+          "npm run lint*": "allow",
+          "npm run smoke*": "allow",
+          "dotnet build*": "allow",
+          "dotnet test*": "allow",
+          "git push*": "deny",
+          "rm -rf *": "deny",
+        },
+      },
+    },
+
+    "audit-pro": {
+      "description": "Audit changed code for correctness, regressions, architecture violations, missing tests, and performance issues.",
+      "mode": "subagent",
+      "model": "opencode-go/muse-spark-1.3-contributor",
+      "temperature": 0.1,
+      "steps": 60,
+      "permission": {
+        "edit": "deny",
+        "bash": {
+          "*": "deny",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "rg *": "allow",
+          "Get-Content *": "allow",
+        },
+      },
+    },
+
+    "fix-pro": {
+      "description": "Fix only confirmed audit findings while preserving the approved implementation scope.",
+      "mode": "subagent",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "temperature": 0.1,
+      "steps": 40,
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "npm test*": "allow",
+          "npm run test*": "allow",
+          "npm run lint*": "allow",
+          "npm run smoke*": "allow",
+          "dotnet build*": "allow",
+          "dotnet test*": "allow",
+          "git push*": "deny",
+          "rm -rf *": "deny",
+        },
+      },
+    },
+
+    "general": {
+      "mode": "subagent",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "ask",
+        "bash": "ask",
+      },
+    },
+  },
+}

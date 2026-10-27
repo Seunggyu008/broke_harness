@@ -1,0 +1,12 @@
+{
+  "name": "broke-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs skill/broke-harness/assets/runtime/tools/harness/*.test.mjs skill/broke-harness/assets/runtime/tools/exec-plans/*.test.mjs",
+    "test:reference": "node --test reference-implementation/tools/harness/*.test.mjs reference-implementation/tools/exec-plans/*.test.mjs",
+    "test:integration": "node --test tests/*.test.mjs"
+  }
+}

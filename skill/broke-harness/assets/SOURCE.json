@@ -1,0 +1,22 @@
+{
+  "source": "User-supplied reference-implementation",
+  "license": "No upstream license supplied; no additional rights granted",
+  "referenceHashesAfterM0Fix": {
+    "reference-implementation/docs/exec-plans/README.md": "53dd77767691f0a7b244484a9101e1cdb97634bb626f685700c865d72eaa3dd0",
+    "reference-implementation/docs/exec-plans/TEMPLATE.md": "bc8ff023e9f3b847043ea5b9ea89f2c54040fe80bbccda13c302cf981adfec46",
+    "reference-implementation/opencode/commands/implement-plan.md": "fa77880e6cc2da948d4751740825d16a8275ae69f84fbde600a042caae8042e1",
+    "reference-implementation/opencode/commands/start-plan-audit.md": "28c13f11bebfe95de65362086ca2e6bc26dd5cc72c3af7613c2bb2520e968270",
+    "reference-implementation/opencode/commands/start-plan.md": "7276af3f04244f67b84ad17f85504a0534c39b3750511ca57fb6fbabdf995c7e",
+    "reference-implementation/opencode/commands/write-plan.md": "ec253c883a147ba4b4cd434df50c6a42d2b50ac7cff1be48e777da256cc9030c",
+    "reference-implementation/opencode/opencode.jsonc": "cb677cf4f0570c728369640fc0a64842c0c32a2bd014f65fc97ce1c2f4a4596d",
+    "reference-implementation/tools/exec-plans/complete-plan.mjs": "c35d4ce7d87c7a56c0c98bf454a282d726be92383f7443269b78c9ebdcda3624",
+    "reference-implementation/tools/exec-plans/complete-plan.test.mjs": "100e5f36ea53fa5bac6060603533c7385df62d7560e51dd234169d625bd048bc",
+    "reference-implementation/tools/exec-plans/lifecycle.test.mjs": "9af8a74d1db0e5236125687d0c6deb94f1442ff4eb6f23997f587983becf064e",
+    "reference-implementation/tools/exec-plans/plan-state.mjs": "52bca94f4eb8f7a17adc6f28325fee51e330b9211e7221ec77e93104726f7a30",
+    "reference-implementation/tools/exec-plans/start-plan.mjs": "17d86d3a0144bc7b1ca9905affdf47827146cadc0d96662b05ae419895eeeea3",
+    "reference-implementation/tools/harness/change-state.mjs": "2fe576bc185e7cab29ecc92a1b220f159ac4c41f6c68f506a07bb40eaa0e5362",
+    "reference-implementation/tools/harness/change-state.test.mjs": "55e3e4f8b24d171522e2b6e22685257c0e0897a0893c76fe65d810ab74b8e0d2",
+    "reference-implementation/tools/harness/run.mjs": "8a88fb3a645abff5e917c8495626d42990b5de86f5eb531d09e90ca013a0c7ff",
+    "reference-implementation/tools/harness/run.test.mjs": "5679870f6950c787edbe2abeadfa120494628bec12e179024a4a979b142ac5d7"
+  }
+}
