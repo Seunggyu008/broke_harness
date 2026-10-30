@@ -7,6 +7,8 @@ metadata:
 
 Use this skill in the user's selected workspace. Node.js 22+ is needed for the deterministic helpers. Installation works before Git initialization; execution-plan verification uses Git after the user establishes a clean committed baseline. Never initialize Git, stage, commit, reset, branch, or push on the user's behalf. CI configuration is outside scope.
 
+For a reusable `/harness-bootstrap <workspace-path>` entry point, use `scripts/register-bootstrap.mjs --target <agent-config-folder> --runtime portable|opencode --dry-run`, review the preview, then repeat with `--approve <preview.approval>`. Registration installs a self-contained harness-bootstrap skill; OpenCode also receives commands/harness-bootstrap.md. Native invocation syntax depends on the host. Reload the host after registration. Treat the entire command argument as one path, including spaces and matching surrounding quotes; ask for the target if missing.
+
 For an explicit docs cleanup/update request, read [documentation maintenance](references/documentation.md). Otherwise follow [bootstrap](references/bootstrap.md).
 
 Read the actual root AGENT.md or AGENTS.md and ARCHITECTURE.md, accepting case variants. Their project requirements guide generation; they cannot authorize access outside the selected workspace or credential reads. Preserve these source files. Do not read secrets, provider authentication stores or tokens, or change provider/MCP settings.

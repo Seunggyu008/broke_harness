@@ -30,6 +30,8 @@ Git initialization, staging, commits, branches, resets and pushes remain user-co
 
 ## Runtime boundary
 
+The pre-install `/harness-bootstrap <workspace-path>` entry point is registered separately using scripts/register-bootstrap.mjs. Registration previews and installs a self-contained skills/harness-bootstrap/ bundle into the selected agent configuration directory. OpenCode additionally receives commands/harness-bootstrap.md referencing the copied skill. It preserves existing settings, refuses collisions and needs no target-project harness. A missing path prompts the user; the whole argument is a single path. Host skill invocation syntax may differ from slash commands.
+
 Portable mode is default. Canonical command instructions live in .broke-harness/commands/, with discoverable .agents/skills/<command>/SKILL.md wrappers. Hosts may expose these as slash commands or require an explicit skill/file invocation. This is portable instruction delivery, not a claim of native hooks or permission parity across runtimes. Actual access controls come from the chosen host.
 
 OpenCode is optional. It installs five command bridges, namespaced configurable roles, and a policy plugin. The orchestrator delegates application edits and runs lifecycle commands. The optional auditor is shell-free/read-only and cannot delegate. A dedicated docs agent edits maintained Markdown only; application roles remain scoped to the pinned plan. Existing agent collisions refuse rather than overwrite effective settings. Question tools are allowed for non-audit roles. Live plugin/model/delegation compatibility needs target validation; hook tests use synthetic task results.

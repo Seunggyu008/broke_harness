@@ -4,7 +4,24 @@ A project-aware skill that creates a development harness from AGENT.md (or AGENT
 
 ## Use the skill
 
-Load skill/broke-harness/SKILL.md in the user's chosen agent and select the target folder. The agent reads the project sources, inspects existing code, asks about full bootstrap only for a new workspace, and authors project-specific documentation and optional initial scaffold. The deterministic installer previews/validates/applies those files without overwriting existing project content.
+Register the bootstrap command once, then use it from your agent:
+
+```text
+/harness-bootstrap "C:/path/to/my project"
+```
+
+The bootstrap command is registered independently of a target project's harness, so it is available before that project has any workflow files. It reads AGENT.md and ARCHITECTURE.md, asks about full bootstrap for a new workspace, and adds only the harness to an existing project. The path may contain spaces; no Git operations are performed.
+
+For OpenCode, register into its user configuration folder (normally `~/.config/opencode`):
+
+```text
+node skill/broke-harness/scripts/register-bootstrap.mjs --target <opencode-config-folder> --runtime opencode --dry-run
+node skill/broke-harness/scripts/register-bootstrap.mjs --target <same-folder> --runtime opencode --approve <preview.approval>
+```
+
+For portable skill discovery, use `--runtime portable` and point --target at the agent configuration folder containing its skills/ directory (for example `~/.agents`). The registered skill is named harness-bootstrap; use the host's explicit skill syntax if it does not expose skills as slash commands. In Codex, invoke `$harness-bootstrap "C:/path/to/my project"` or select it through /skills. See the [official skill invocation documentation](https://learn.chatgpt.com/docs/build-skills#how-codex-uses-skills). Restart/reload the agent after registration. Registration copies a self-contained bundle and preserves existing configuration; conflicting commands/skills refuse replacement. Later source updates require reviewing registration conflicts rather than silently replacing an installed copy.
+
+You can also load skill/broke-harness/SKILL.md directly and select the target folder. The agent reads the project sources, inspects existing code, asks about full bootstrap only for a new workspace, and authors project-specific documentation and optional initial scaffold. The deterministic installer previews/validates/applies those files without overwriting existing project content.
 
 ```text
 node <skill>/scripts/inspect.mjs --target <absolute-folder>

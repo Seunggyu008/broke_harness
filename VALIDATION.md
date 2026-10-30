@@ -1,3 +1,15 @@
+# Bootstrap command registration validation ? 2026-10-30
+
+Added a pre-install harness-bootstrap entry point with deterministic registration into a chosen agent configuration directory. Portable registration creates a self-contained skills/harness-bootstrap/ bundle. Optional OpenCode registration also creates commands/harness-bootstrap.md. No target project needs an existing harness.
+
+- `npm test`: 79/79 passed, zero skipped/cancelled, including three new registration tests.
+- Registration tests verify non-mutating preview, stale-token/conflict rejection, idempotency, independent execution of the copied inspector from another working directory, paths with spaces, existing settings preservation, and symlink/recursive-target refusal.
+- Skill validator passed for the source skill, a disposable registered alias, and the actual registered user alias. Node syntax check passed for register-bootstrap.mjs. `git diff --check` passed.
+- At the user's selection, portable registration was applied to C:/Users/GCLabs/.agents/skills/harness-bootstrap/ with 40 files and no conflicts. A repeat preview skips every file. No existing skills/configuration were modified. No OpenCode user command was registered.
+- Native host discovery and live model bootstrap execution remain separate from filesystem registration. Official OpenAI documentation confirms user skills under ~/.agents/skills and explicit dollar/skill-picker invocation; restart/reload if discovery does not refresh.
+
+---
+
 # 0.2 validation ? 2026-10-30 (Asia/Seoul)
 
 Executed on Windows with Node.js v24.14.0. The implementation follows the user-directed bootstrap/report/optional-audit flow; CI configuration is outside scope. The 0.1 record below is historical and does not define the current product contract.
