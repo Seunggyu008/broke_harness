@@ -13,7 +13,7 @@ const HARNESS_TIME = "2026-07-28T10:00:00.000Z";
 const AUDIT_TIME = "2026-07-28T10:05:00.000Z";
 const NOW = Date.parse("2026-07-28T10:10:00.000Z");
 
-test("parseArgs requires explicit harness and audit artifacts", () => {
+test("parseArgs requires a harness and accepts optional audit artifacts", () => {
   assert.deepEqual(
     parseArgs([
       PLAN_PATH,
@@ -30,6 +30,26 @@ test("parseArgs requires explicit harness and audit artifacts", () => {
   );
 
   assert.throws(() => parseArgs([PLAN_PATH]), /--harness/);
+  assert.equal(parseArgs([PLAN_PATH, '--harness', '.tmp/harness-report.json']).audit, null);
+});
+
+test('completion validates current harness without inventing optional audit evidence', () => {
+  const input = createValidationInput();
+  delete input.auditResult;
+  assert.doesNotThrow(() => validateCompletionArtifacts(input));
+  input.harnessReport.verification[0].exitCode = 1;
+  assert.throws(() => validateCompletionArtifacts(input), /every required verification/);
+});
+
+test('unaudited completion still requires ordered acceptance criteria and fresh evidence', () => {
+  const input = createValidationInput();
+  delete input.auditResult;
+  input.harnessReport.acceptanceCriteria = [];
+  assert.throws(() => validateCompletionArtifacts(input), /unique ordered AC IDs/);
+  const stale = createValidationInput();
+  delete stale.auditResult;
+  stale.nowMs = Date.parse('2026-07-30T10:10:00.000Z');
+  assert.throws(() => validateCompletionArtifacts(stale), /freshness window/);
 });
 
 test("getArchivePlanPath maps only direct active plans into the archive", () => {

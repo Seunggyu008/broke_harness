@@ -5,6 +5,11 @@ import { createHash } from 'node:crypto';
 
 export const hash = value => createHash('sha256').update(value).digest('hex');
 export const json = value => JSON.stringify(value, null, 2) + '\n';
+export function parseJSONC(text) {
+  const comments = /"(?:\\.|[^"\\])*"|\/\/[^\r\n]*|\/\*[\s\S]*?\*\//g;
+  const commas = /"(?:\\.|[^"\\])*"|,\s*(?=[}\]])/g;
+  return JSON.parse(text.replace(comments, token => token.startsWith('"') ? token : '').replace(commas, token => token.startsWith('"') ? token : ''));
+}
 export function relativePath(value) {
   if (typeof value !== 'string' || !value || /[\x00-\x1f:*?"<>|\\]/.test(value) || path.posix.isAbsolute(value) || value.split('/').some(s => !s || s === '.' || s === '..' || /[. ]$/.test(s) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(s))) throw new Error(`Unsafe repository path: ${value}`);
   return value;
@@ -42,5 +47,20 @@ export async function repository(target) {
   const actual = await realpath(git(root, ['rev-parse', '--show-toplevel']).trim());
   if (root !== actual) throw new Error(`Select the Git root explicitly: ${actual}`);
   if (git(root, ['rev-parse', '--is-bare-repository']).trim() !== 'false') throw new Error('A working Git repository is required');
+  return root;
+}
+
+// Installation is also useful before the owner initializes Git. Never initialize it here.
+export async function workspace(target) {
+  const root = await realpath(target);
+  if (!(await lstat(root)).isDirectory()) throw new Error('Select an existing workspace directory');
+  if (path.basename(root).toLowerCase() === '.git') throw new Error('Cannot install into Git metadata');
+  let bare;
+  try { bare = git(root, ['rev-parse', '--is-bare-repository']).trim(); } catch { /* An ordinary folder need not have Git yet. */ }
+  if (bare === 'true') throw new Error('Cannot install into a bare Git repository');
+  let actual;
+  try { actual = await realpath(git(root, ['rev-parse', '--show-toplevel']).trim()); }
+  catch { return root; }
+  if (root !== actual) throw new Error(`Select the Git root explicitly: ${actual}`);
   return root;
 }

@@ -33,7 +33,7 @@ async function fixture(t) {
   await write('docs/API.md','Value: 1\n');
   return { root, git, write, read, commit, run, ok, fail };
 }
-async function install(f, config) { const p = await preview(f.root, config); assert.deepEqual(p.conflicts, []); await apply(f.root, p.approval, config); return p; }
+async function install(f, config) { const p = await preview(f.root, { runtime: 'opencode', ...config }); assert.deepEqual(p.conflicts, []); await apply(f.root, p.approval, { runtime: 'opencode', ...config }); return p; }
 async function snapshot(root) {
   const entries = [];
   async function visit(dir, prefix = '') {
@@ -119,12 +119,12 @@ test('role overrides render consistently; unsupported runtime, capabilities and 
   assert.match(await f.read('.opencode/commands/start-plan-audit.md'), /agent: custom-audit/);
   assert.match(await f.read('.opencode/commands/start-plan.md'), /agent: broke-orchestrator/);
   assert.deepEqual(Object.keys(overlay.agent['broke-orchestrator'].permission.task), ['*','custom-implement','custom-audit','custom-fix']);
-  for (const runtime of ['codex','claude-code','mixed']) await assert.rejects(preview(f.root,{ runtime }), /supports only single-runtime opencode/);
+  for (const runtime of ['codex','claude-code','mixed']) await assert.rejects(preview(f.root,{ runtime }), /Choose runtime portable/);
   assert.throws(() => resolveConfiguration({ roles: { audit: { runtime:'codex' } } }), /Unknown/);
   assert.throws(() => resolveConfiguration({ roles: { audit: { tools:['write'] } } }), /Unknown/);
   assert.throws(() => resolveConfiguration({ policy: { auditReadOnly:false } }), /cannot be disabled/);
   assert.throws(() => resolveConfiguration({ schemaVersion:2 }), /schemaVersion/);
-  assert.throws(() => resolveConfiguration({ roles: { audit: { agent:'build' } } }), /unique/);
+  assert.throws(() => resolveConfiguration({ roles: { audit: { agent:'broke-implement' } } }), /unique/);
 });
 
 test('traversal, symlinks and secret reads are refused without installation writes', async t => {
@@ -148,7 +148,7 @@ test('doctor validates a clean install, installed regression suites, policy tamp
   const result = await doctor(f.root, { tests:true });
   assert.equal(result.status,'PASS',JSON.stringify(result));
   assert.equal(result.tests.status,0,result.tests.stdout + result.tests.stderr);
-  assert.match(result.tests.stdout,/tests 54/);
+  assert.match(result.tests.stdout,/tests 56/);
   assert.ok((await preview(f.root)).operations.every(o => o.action === 'skip'));
   await f.write('.broke-harness/opencode.json',JSON.stringify({ agent:{} }));
   const broken = await doctor(f.root);
@@ -238,8 +238,8 @@ test('actual OpenCode plugin hook denies audit writes/shell/MCP/delegation and e
   await f.write('src/main.mjs','export const value = 2;\n'); await f.write('docs/API.md','Value: 2\n');
   f.ok('tools/harness/run.mjs','--plan',PLAN);
   const args = {subagent_type:config.roles.audit.agent,prompt:'Independent fixture audit',description:'fixture'};
-  await assert.rejects(hooks['tool.execute.before']({sessionID:'implement',tool:'write'},{args:{filePath:'src/main.mjs'}}),/bounded fixer role/);
-  await assert.rejects(invoke('task',{subagent_type:config.roles.implement.agent}),/bounded fixer role/);
+  await hooks['tool.execute.before']({sessionID:'implement',tool:'write'},{args:{filePath:'src/main.mjs'}});
+  await invoke('task',{subagent_type:config.roles.implement.agent});
   await invoke('task',args,'audit-call');
   const report = JSON.parse(await f.read('.tmp/harness-report.json'));
   const result = { metadata:{sessionId:'fresh-child'},output:'<task id="fresh-child" state="completed">\n<task_result>\n' + JSON.stringify(syntheticAudit(report)) + '\n</task_result>\n</task>' };
@@ -314,11 +314,11 @@ test('CLI inspector, approval gate, install and doctor work with space-containin
 
 test('existing runtime role definitions conflict and core refuses symlinked evidence directories', async t => {
   const f = await fixture(t);
-  await f.write('.opencode/agents/audit-pro.md','---\nmode: subagent\n---\nexisting user role');
-  const proposed = await preview(f.root);
+  await f.write('.opencode/agents/broke-audit.md','---\nmode: subagent\n---\nexisting user role');
+  const proposed = await preview(f.root, { runtime:'opencode' });
   assert.ok(proposed.conflicts.some(p => p.includes('existing role definition')));
-  await assert.rejects(apply(f.root,proposed.approval),/conflicts/);
-  await rm(path.join(f.root,'.opencode/agents/audit-pro.md'));
+  await assert.rejects(apply(f.root,proposed.approval,{ runtime:'opencode' }),/conflicts/);
+  await rm(path.join(f.root,'.opencode/agents/broke-audit.md'));
   await install(f); f.commit(); await f.write(PLAN,planText());
   const outside = path.join(f.root,'outside-artifacts'); await mkdir(outside);
   await symlink(outside,path.join(f.root,'.tmp'),process.platform === 'win32' ? 'junction' : 'dir');

@@ -1,29 +1,36 @@
 # Configuration and compatibility
 
-Node.js 22+ and Git are the only core dependencies. The installer requires the explicit Git root, works without an initial commit, preserves user files, and refuses conflicting owned files. V0.1 has no automatic upgrade/merge or uninstall. Resolve existing harness conflicts manually from the preview; there is no force-overwrite option. Copy the entire skill directory when distributing it; its assets are canonical runtime copies.
+Node.js 22+ is the intended baseline; tests run on the available Node version. Installation requires an existing folder, not an initialized Git repository. Running the canonical regression suites with --tests still requires the Git executable. The plan lifecycle requires Git and a user-created clean committed baseline. No dependencies, credentials, MCP servers or CI are installed. macOS/Linux and native command discovery in other hosts require target validation.
 
-Only single-runtime OpenCode orchestration is implemented. Codex, Claude Code and mixed-runtime configurations are rejected. Core modules never import an adapter or model SDK. Tests run the documented OpenCode plugin hook interface with synthetic task results; they do not prove a live model audit happened. The local environment may lack OpenCode/provider access. Doctor reports that limitation and never certifies live provider availability from static model identifiers. Trusted global plugins or managed configuration may change runtime behavior; inspect and validate the effective runtime before use.
+Default runtime is portable. It installs command skills for the user's chosen agent without model selection or runtime hooks. OpenCode is an optional adapter with configurable role/provider/model identifiers. Other dedicated runtime adapters and cross-runtime orchestration are not supplied; portable command instructions can be followed by any capable agent using its existing tools.
 
-Use a JSON file with schemaVersion 1. Unspecified fields inherit the preset. Unknown keys and disabled invariants are rejected. Example:
+Configuration is schemaVersion 1. Unspecified values inherit defaults. Example agent-authored bootstrap input, stored outside the workspace and passed with --config to preview and apply:
 
 ```json
 {
   "schemaVersion": 1,
-  "runtime": "opencode",
-  "roles": {
-    "plan": { "agent": "my-planner", "provider": "my-provider", "model": "my-plan-model", "temperature": 0.1, "steps": 60 },
-    "implement": { "agent": "my-builder", "provider": "my-provider", "model": "my-code-model" },
-    "audit": { "agent": "my-auditor", "provider": "my-provider", "model": "my-review-model" },
-    "fix": { "agent": "my-fixer", "provider": "my-provider", "model": "my-code-model" }
+  "runtime": "portable",
+  "bootstrap": "project",
+  "project": {
+    "summary": "Project boundaries and initial scope derived from AGENT.md and ARCHITECTURE.md.",
+    "documentation": [
+      { "path": "docs/PRODUCT.md", "content": "# Product\n\nProject-specific scope and implemented versus planned behavior.\n" }
+    ],
+    "scaffold": [
+      { "path": "src/main.mjs", "content": "export const ready = true;\n" },
+      { "path": "package.json", "content": "{\"type\":\"module\",\"scripts\":{\"check\":\"node --check src/main.mjs\"}}\n" }
+    ]
   },
   "documentationSync": {
-    "rules": [{ "trigger": ["src/contracts/**"], "require": ["docs/API.md"] }]
+    "rules": [{ "trigger": ["src/**"], "require": ["docs/PRODUCT.md"] }]
   }
 }
 ```
 
-Each triggered rule requires at least one matching changed documentation file. Multiple rules are enforced independently. Empty rules mean no additional discovered synchronization contract; requiresDocs still applies. Inspector reports this as unknown for owner review, rather than inventing application-specific rules. Commands come from approved plans, never from installer execution of package scripts. Role agent names must be distinct. Provider/model fields are identifiers, never secrets; do not put API keys here. Temperature and step limits can be overridden; security permissions and invariant policy cannot.
+This schema is an illustration, not a universal application scaffold. The agent chooses actual files from the source documents. bootstrap: project requires a new workspace, both source documents and non-empty scaffold. bootstrap: harness never accepts application scaffold. Generated documentation must be Markdown under docs/, outside exec-plans. Traversal, secrets, hidden infrastructure, source instruction/architecture files and owned harness paths are refused. Existing-file conflicts never overwrite user content. Generated project files become mutable after install; canonical harness assets remain hash-checked. Updates/merges/uninstall are manual.
 
-Existing project config remains byte-for-byte intact. The generated overlay intentionally controls selected role models, tools and delegation; other settings remain owned by the project. Existing command/agent definition conflicts refuse installation. Global/managed settings and third-party plugins are outside the installer’s trust boundary.
+To opt into OpenCode, set runtime: opencode. Partial role overrides use roles.plan, roles.implement, roles.audit, roles.fix with agent, provider, model, optional temperature and steps. Defaults use namespaced agent names to avoid changing built-in build/plan. Existing role collisions fail preview or runtime overlay loading rather than replacing owner settings. Names and model IDs do not establish provider availability. Shell-free, read-only audit controls apply when review is requested; review itself is optional.
 
-OpenCode references used for the adapter: [agents and task permissions](https://opencode.ai/docs/agents/), [permission precedence](https://opencode.ai/docs/permissions/), [plugin hooks](https://opencode.ai/docs/plugins/). The compatibility tests target the legacy two-argument plugin hook API and task metadata.sessionId plus task_result output documented in OpenCode v1.18.29 source. A changed API fails closed and needs adapter validation before use. No particular provider subscription is required.
+The retained policy fields are maxCombinedFixAttempts: 3, requireIndependentAudit: false, auditReadOnly: true and requireCompletionApproval: true. They are not an invitation to turn normal execution into mandatory auditing. Completion's approval token binds the reviewed diff, not a human identity or conversation turn. A requested audit must use independent evidence; absent audit evidence is never manufactured.
+
+Every configured documentation-sync trigger requires at least one matching documentation change. The agent derives rules from actual project ownership, with user direction for ambiguity. Empty rules add no special synchronization contract; requiresDocs in each plan still applies. Never invent verification commands or claim an unexecuted check passed. Default portable mode respects existing runtime settings. OpenCode hooks are integration-tested with synthetic child results, not certified against every live runtime version.

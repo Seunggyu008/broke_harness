@@ -12,18 +12,37 @@ async function collect(directory, prefix, result) {
     else result.set(`${prefix}${item.name}`, await readFile(path.join(directory, item.name), 'utf8'));
   }
 }
-export async function render(config) {
+export async function render(config, profile) {
   const files = new Map();
   files.set('.broke-harness/provenance.json', await readFile(path.join(bundle, 'assets/SOURCE.json'), 'utf8'));
   await collect(path.join(bundle, 'assets/runtime'), '', files);
   await collect(path.join(bundle, 'assets/docs'), 'docs/', files);
   files.set('docs/exec-plans/active/.gitkeep', '');
   files.set('docs/exec-plans/archive/.gitkeep', '');
+  await collect(path.join(bundle, 'assets/commands'), '.broke-harness/commands/', files);
+  for (const [file, content] of [...files]) if (file.startsWith('.broke-harness/commands/')) {
+    const name = path.basename(file, '.md');
+    files.set(`.agents/skills/${name}/SKILL.md`, `---\nname: ${name}\ndescription: ${content.split('\n')[0].replace(/^# /, '')}\n---\n\n${content}`);
+  }
+  files.set('.agents/skills/update-docs/agents/openai.yaml', 'policy:\n  allow_implicit_invocation: false\n');
+  if (profile) {
+    const project = config.project;
+    const lines = ['# Project workflow context', '', project.summary || 'Read the source documents below for project scope and architecture.', '', '## Sources', '', ...profile.sources.map(s => `- ${s.path}`), '', '## Ownership', '', ...profile.pathOwnership.map(o => `- ${o.directory}: ${o.instructions}`), '', '## Declared checks (not executed)', '', ...profile.commands.map(c => `- ${c.command} (working directory: ${c.cwd})`), '', 'Use docs/INDEX.md to select relevant documentation. Git operations belong to the user.'];
+    files.set('.broke-harness/PROJECT.md', lines.join('\n') + '\n');
+    for (const file of project.documentation) files.set(file.path, file.content);
+    if (!profile.documentation.includes('docs/INDEX.md') && !files.has('docs/INDEX.md')) files.set('docs/INDEX.md', ['# Documentation index', '', ...profile.sources.map(s => `- [${s.path}](../${s.path}): project instructions and architecture.`), ...[...new Set([...profile.documentation.filter(p => p.startsWith('docs/') && !p.startsWith('docs/exec-plans/')), ...project.documentation.map(d => d.path)])].map(p => `- [${p.slice(5)}](${p.slice(5)}): project documentation.`), '- [Execution plans](exec-plans/README.md): author, approve, implement, report, and archive plans.', '', 'Run /update-docs explicitly to reconcile documentation with the implementation.', ''].join('\n'));
+    if (config.bootstrap === 'project') for (const file of project.scaffold) files.set(file.path, file.content);
+  }
+  if (config.runtime !== 'opencode') {
+    files.set('broke-harness.config.json', json(config));
+    files.set('.broke-harness/WORKFLOW.md', await readFile(path.join(bundle, 'references/workflow.md'), 'utf8'));
+    return files;
+  }
   await collect(path.join(bundle, 'assets/opencode/commands'), '.opencode/commands/', files);
   for (const [file, text] of files) if (file.startsWith('.opencode/commands/')) {
     const role = file.endsWith('write-plan.md') ? 'plan' : file.endsWith('start-plan-audit.md') ? 'audit' : 'implement';
     const selected = config.roles[role];
-    let next = text.replace(/^agent: .*$/m, `agent: ${file.endsWith('/start-plan.md') ? 'broke-orchestrator' : selected.agent}`).replace(/^model: .*$/m, `model: ${selected.provider}/${selected.model}`);
+    let next = text.replace(/^agent: .*$/m, `agent: ${file.endsWith('/start-plan.md') ? 'broke-orchestrator' : file.endsWith('/update-docs.md') ? 'broke-docs' : selected.agent}`).replace(/^model: .*$/m, `model: ${selected.provider}/${selected.model}`);
     next = next.replaceAll('`audit-pro`', `\`${config.roles.audit.agent}\``).replaceAll('`fix-pro`', `\`${config.roles.fix.agent}\``);
     next = next.replaceAll('the configured implement agent', `\`${config.roles.implement.agent}\``);
     next = next.replaceAll('Read `docs/INDEX.md`.', 'Read the existing documentation index when present.').replaceAll('Read `AGENTS.md`', 'Read the existing `AGENTS.md` (or `AGENT.md`) when present');
@@ -48,12 +67,15 @@ export default async ({ directory, client }) => {
   return {
     config: async (effective) => {
       effective.agent ??= {};
-      for (const [name, definition] of Object.entries(overlay.agent)) effective.agent[name] = definition;
+      for (const [name, definition] of Object.entries(overlay.agent)) {
+        if (effective.agent[name] && JSON.stringify(effective.agent[name]) !== JSON.stringify(definition)) throw new Error('Existing agent conflicts with harness role: ' + name);
+        effective.agent[name] = definition;
+      }
     },
     'chat.params': async (input) => {
       agents.set(input.sessionID, input.agent);
       const role = roleFor(config, input.agent);
-      if (role && role !== 'orchestrator') {
+      if (role && config.roles[role]) {
         const selected = config.roles[role];
         if (input.model.providerID !== selected.provider || input.model.id !== selected.model) throw new Error('Selected role model unavailable or overridden; no silent fallback');
       }

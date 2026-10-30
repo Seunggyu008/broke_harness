@@ -1,13 +1,16 @@
+import { relativePath, secretPath } from './safe-files.mjs';
+
 export const defaults = {
-  schemaVersion: 1, runtime: 'opencode',
+  schemaVersion: 1, runtime: 'portable', bootstrap: 'harness',
+  project: { summary: '', documentation: [], scaffold: [] },
   roles: {
-    plan: { agent: 'plan', provider: 'opencode', model: 'muse-spark-1.3-contributor-free' },
-    implement: { agent: 'build', provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
-    audit: { agent: 'audit-pro', provider: 'opencode-go', model: 'muse-spark-1.3-contributor' },
-    fix: { agent: 'fix-pro', provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
+    plan: { agent: 'broke-plan', provider: 'opencode', model: 'muse-spark-1.3-contributor-free' },
+    implement: { agent: 'broke-implement', provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
+    audit: { agent: 'broke-audit', provider: 'opencode-go', model: 'muse-spark-1.3-contributor' },
+    fix: { agent: 'broke-fix', provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
   },
   documentationSync: { rules: [] },
-  policy: { maxCombinedFixAttempts: 3, requireIndependentAudit: true, auditReadOnly: true, requireCompletionApproval: true },
+  policy: { maxCombinedFixAttempts: 3, requireIndependentAudit: false, auditReadOnly: true, requireCompletionApproval: true },
 };
 function keys(value, allowed, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !allowed.includes(k))) throw new Error(`Unknown or invalid ${label} keys`);
@@ -17,10 +20,31 @@ export function pattern(value) {
   return value;
 }
 export function resolveConfiguration(input = {}) {
-  keys(input, ['schemaVersion','runtime','roles','documentationSync','policy'], 'configuration');
+  keys(input, ['schemaVersion','runtime','bootstrap','project','roles','documentationSync','policy'], 'configuration');
   if (input.schemaVersion !== undefined && input.schemaVersion !== 1) throw new Error('Unsupported schemaVersion; expected 1');
-  if (input.runtime !== undefined && input.runtime !== 'opencode') throw new Error('V0.1 supports only single-runtime opencode; Codex, Claude Code and mixed runtimes are unsupported');
+  if (input.runtime !== undefined && !['portable','opencode'].includes(input.runtime)) throw new Error('Choose runtime portable (agent of your choice) or opencode; no dedicated adapter is supplied for other runtimes');
   const config = structuredClone(defaults);
+  config.runtime = input.runtime ?? defaults.runtime;
+  if (input.bootstrap !== undefined && !['harness','project'].includes(input.bootstrap)) throw new Error('bootstrap must be harness or project');
+  config.bootstrap = input.bootstrap ?? defaults.bootstrap;
+  if (input.project) {
+    keys(input.project, ['summary','documentation','scaffold'], 'project');
+    Object.assign(config.project, input.project);
+    if (typeof config.project.summary !== 'string') throw new Error('Project summary must be text');
+    const seen = new Set();
+    for (const field of ['documentation','scaffold']) {
+      if (!Array.isArray(config.project[field])) throw new Error(`project.${field} must be an array`);
+      for (const file of config.project[field]) {
+        keys(file, ['path','content'], `project.${field} file`);
+        relativePath(file.path);
+        if (secretPath(file.path) || /^(?:\.|tools\/(?:harness|exec-plans)|docs\/exec-plans|broke-harness\.config\.json|opencode\.json)/i.test(file.path) || /^(?:AGENTS?|ARCHITECTURE)\.md$/i.test(file.path)) throw new Error(`Protected generated path: ${file.path}`);
+        if (field === 'documentation' && (!file.path.startsWith('docs/') || !file.path.endsWith('.md'))) throw new Error('Generated documentation must be docs/*.md');
+        if (typeof file.content !== 'string' || !file.content.trim() || Buffer.byteLength(file.content) > 4 * 1024 * 1024 || seen.has(file.path.toLowerCase())) throw new Error('Generated files need unique paths and bounded non-empty content');
+        seen.add(file.path.toLowerCase());
+      }
+    }
+  }
+  if (config.bootstrap !== 'project' && config.project.scaffold.length) throw new Error('Application scaffold requires explicit bootstrap: project');
   if (input.roles) {
     keys(input.roles, Object.keys(defaults.roles), 'roles');
     for (const [name, role] of Object.entries(input.roles)) {
@@ -28,7 +52,7 @@ export function resolveConfiguration(input = {}) {
       Object.assign(config.roles[name], role);
     }
   }
-  const names = new Set(['broke-orchestrator']);
+  const names = new Set(['broke-orchestrator','broke-docs']);
   for (const [name, role] of Object.entries(config.roles)) {
     if (!/^[a-z][a-z0-9-]*$/.test(role.agent) || names.has(role.agent)) throw new Error(`Role ${name} needs a unique agent name`);
     names.add(role.agent);
@@ -49,5 +73,6 @@ export function resolveConfiguration(input = {}) {
       return { trigger: rule.trigger.map(pattern), require: rule.require.map(pattern) };
     });
   }
+  if (Buffer.byteLength(JSON.stringify(config)) > 4 * 1024 * 1024) throw new Error('Resolved configuration exceeds the 4 MiB input limit; reduce the initial scaffold');
   return config;
 }

@@ -37,12 +37,12 @@ export async function main(argv = process.argv.slice(2)) {
   const archivePlan = resolveRepoPath(getArchivePlanPath(plan.relativePath));
 
   const harness = resolveRepoPath(options.harness);
-  const audit = resolveRepoPath(options.audit);
-  for (const item of [plan, archivePlan, harness, audit]) await assertSafeRepoPath(repoRoot, item.relativePath);
+  const audit = options.audit ? resolveRepoPath(options.audit) : null;
+  for (const item of [plan, archivePlan, harness, audit].filter(Boolean)) await assertSafeRepoPath(repoRoot, item.relativePath);
   const [planText, harnessReport, auditResult] = await Promise.all([
     readFile(plan.absolutePath, "utf8"),
     readJson(harness.absolutePath, "Harness report"),
-    readJson(audit.absolutePath, "Audit result"),
+    audit ? readJson(audit.absolutePath, "Audit result") : null,
   ]);
 
   const statusMatch = planText.match(/^- Status:\s*`([^`]+)`\s*$/m);
@@ -101,7 +101,7 @@ export async function main(argv = process.argv.slice(2)) {
     );
   }
   console.log(
-    `Plan status updated: in-progress -> done and archived to ${archivePlan.relativePath}; harness and audit artifacts are fresh for ${currentChangeFingerprint}.`,
+    `Plan status updated: in-progress -> done and archived to ${archivePlan.relativePath}; harness${audit ? ' and optional audit' : ''} evidence is fresh for ${currentChangeFingerprint}. No Git mutations were performed.`,
   );
 }
 
@@ -153,9 +153,9 @@ export function parseArgs(argv) {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  if (!options.plan || !options.harness || !options.audit) {
+  if (!options.plan || !options.harness) {
     throw new Error(
-      "Usage: node tools/exec-plans/complete-plan.mjs <plan-path> --harness <report-path> --audit <result-path>",
+      "Usage: node tools/exec-plans/complete-plan.mjs <plan-path> --harness <report-path> [--audit <result-path>] --approve <fingerprint>",
     );
   }
 
@@ -172,10 +172,9 @@ export function validateCompletionArtifacts({
   planText,
 }) {
   if (
-    !harnessReport || typeof harnessReport !== "object" ||
-    !auditResult || typeof auditResult !== "object"
+    !harnessReport || typeof harnessReport !== "object"
   ) {
-    throw new Error("Completion requires harness and audit JSON objects.");
+    throw new Error("Completion requires a harness JSON object.");
   }
   if (harnessReport.status !== "PASS") {
     throw new Error("Plan completion requires a passing harness report.");
@@ -222,6 +221,13 @@ export function validateCompletionArtifacts({
     );
   }
 
+  const harnessTime = parseTimestamp(harnessReport.generatedAt, 'Harness report');
+  const harnessAge = nowMs - harnessTime;
+  if (harnessAge < 0 || harnessAge > MAX_ARTIFACT_AGE_MS) throw new Error('Harness report is outside the 24-hour completion freshness window.');
+  if (!Array.isArray(harnessReport.acceptanceCriteria) || !harnessReport.acceptanceCriteria.length || harnessReport.acceptanceCriteria.some((item, index) => !item || item.id !== `AC-${index + 1}` || typeof item.text !== 'string' || !item.text.trim())) throw new Error('Harness acceptance criteria must contain unique ordered AC IDs and non-empty text.');
+  // Independent review is the owner's choice. Never fabricate an audit to complete a plan.
+  if (auditResult === undefined || auditResult === null) return;
+  if (typeof auditResult !== 'object' || Array.isArray(auditResult)) throw new Error('Optional audit must be a JSON object.');
   if (auditResult.outcome !== "clean") {
     throw new Error("Plan completion requires a clean structured audit result.");
   }

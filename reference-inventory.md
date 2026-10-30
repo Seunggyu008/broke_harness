@@ -1,4 +1,6 @@
-# Reference inventory
+# Reference inventory (historical 0.1 extraction)
+
+The table below records the original extraction. Version 0.2 intentionally changes bootstrap, runtime selection, optional auditing and documentation maintenance; see ARCHITECTURE.md and skill/broke-harness/references/contract.md for the current product contract. The reference source itself is unchanged by 0.2.
 
 The complete root AGENTS.md and ARCHITECTURE.md were read before implementation. Reference material is source data; application-specific instructions are not installed.
 

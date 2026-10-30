@@ -10,15 +10,10 @@ import { validateCompletionArtifacts, validatePassingHarness } from '../../../to
 
 const READ = new Set(['read','glob','grep','list']);
 const EDIT = new Set(['write','edit']); // apply_patch is denied: it can encode additional paths.
-const protectedPath = p => secretPath(p) || /^(?:\.git(?:ignore|attributes)?|\.tmp|\.broke-harness|\.opencode|tools\/(?:harness|exec-plans)|broke-harness\.config\.json|opencode\.jsonc?)(?:\/|$)/.test(p);
+const protectedPath = p => secretPath(p) || /^(?:\.git(?:ignore|attributes)?|\.tmp|\.broke-harness|\.opencode|\.agents|tools\/(?:harness|exec-plans)|broke-harness\.config\.json|opencode\.jsonc?)(?:\/|$)/i.test(p);
 const PLAN = /^docs\/exec-plans\/active\/[a-zA-Z0-9._-]+\.md$/;
 
 async function load(root, name) { return JSON.parse(await readFile(await safePath(root, name), 'utf8')); }
-async function requireInitialImplementation(root, plan) {
-  let report;
-  try { report = await load(root, '.tmp/harness-report.json'); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-  if (report?.planPath === plan.planPath && report.headRevision === await getHeadRevision(root)) throw new Error('After the first harness run, application corrections require the bounded fixer role');
-}
 async function active(root) {
   const dir = await safePath(root, 'docs/exec-plans/active');
   const results = [];
@@ -34,9 +29,11 @@ async function active(root) {
   if (!state) throw new Error('Pinned start state required');
   return plan;
 }
-export function roleFor(config, agent) { return agent === 'broke-orchestrator' ? 'orchestrator' : Object.keys(config.roles).find(r => config.roles[r].agent === agent); }
+export function roleFor(config, agent) { return agent === 'broke-orchestrator' ? 'orchestrator' : agent === 'broke-docs' ? 'docs' : Object.keys(config.roles).find(r => config.roles[r].agent === agent); }
+const documentationPath = file => !secretPath(file) && (/^(?:README|ARCHITECTURE)\.md$/i.test(file) || /^docs\/(?!exec-plans\/).+\.md$/i.test(file));
 export async function authorize({ root, config, role, tool, args }) {
   if (!role) throw new Error('Agent identity unavailable; denying tool execution');
+  if (tool === 'question' && role !== 'audit') return;
   if (READ.has(tool)) {
     const requested = args.filePath ?? args.path ?? '.';
     if (requested !== '.') {
@@ -49,11 +46,27 @@ export async function authorize({ root, config, role, tool, args }) {
     return;
   }
   if (role === 'audit') throw new Error(`Read-only audit denies ${tool}`);
+  if (role === 'docs' && tool === 'apply_patch') {
+    const patch = args.patchText;
+    if (typeof patch !== 'string' || !patch.startsWith('*** Begin Patch\n') || !patch.trimEnd().endsWith('*** End Patch')) throw new Error('Explicit documentation patch required');
+    const paths = [...patch.matchAll(/^\*\*\* (?:Add File:|Update File:|Delete File:|Move to:) (.+)$/gm)].map(m => m[1]);
+    if (!paths.length) throw new Error('Documentation patch must name its files');
+    for (const value of paths) {
+      const file = relativePath(path.isAbsolute(value) ? path.relative(root, value).split(path.sep).join('/') : value);
+      await safePath(root, file);
+      if (!documentationPath(file)) throw new Error(`Docs command cannot edit ${file}`);
+    }
+    return;
+  }
   if (EDIT.has(tool)) {
     const value = args.filePath;
     if (typeof value !== 'string') throw new Error('Explicit filePath required');
     const file = relativePath(path.isAbsolute(value) ? path.relative(root, value).split(path.sep).join('/') : value.replace(/\\/g, '/'));
     await safePath(root, file);
+    if (role === 'docs') {
+      if (!documentationPath(file)) throw new Error(`Docs command cannot edit ${file}`);
+      return;
+    }
     if (role === 'orchestrator' && file === '.tmp/audit-result.json') {
       // Orchestrator persists only a validated audit, returned by an independently observed task.
       if (tool !== 'write') throw new Error('Persist the entire audit JSON with write');
@@ -69,9 +82,8 @@ export async function authorize({ root, config, role, tool, args }) {
       if (tool !== 'write' || (args.content.match(/^- Status:/gm) ?? []).length !== 1 || !/^- Status: `draft`\s*$/m.test(args.content)) throw new Error('Planner must write an entire draft plan and cannot grant approval');
       return;
     }
-    if (!['implement','fix'].includes(role) || protectedPath(file) || file.startsWith('docs/exec-plans/')) throw new Error(`Role cannot edit ${file}`);
+    if (!['implement','fix'].includes(role) || protectedPath(file) || /^docs\/exec-plans\//i.test(file)) throw new Error(`Role cannot edit ${file}`);
     const plan = await active(root);
-    if (role === 'implement') await requireInitialImplementation(root, plan);
     if (!plan.contract.allowedPaths.some(p => matchesGlob(file, p))) throw new Error(`Edit outside allowedPaths denied: ${file}`);
     return;
   }
@@ -79,7 +91,6 @@ export async function authorize({ root, config, role, tool, args }) {
     const selected = Object.keys(config.roles).find(r => config.roles[r].agent === args.subagent_type);
     if (!['implement','fix','audit'].includes(selected) || args.background) throw new Error('Only foreground harness role delegation is permitted');
     const plan = await active(root);
-    if (selected === 'implement') await requireInitialImplementation(root, plan);
     if (selected === 'audit') {
       if (args.task_id) throw new Error('Independent audit requires a fresh task without task_id');
       const report = await load(root, '.tmp/harness-report.json');
@@ -122,7 +133,7 @@ export async function authorize({ root, config, role, tool, args }) {
     if (typeof command !== 'string' || /[\r\n;&|`$<>]/.test(command)) throw new Error('Arbitrary shell denied');
     const planPattern = 'docs/exec-plans/active/[a-zA-Z0-9._-]+\\.md';
     if (new RegExp(`^node tools/exec-plans/start-plan\\.mjs ${planPattern}$`).test(command) || new RegExp(`^node tools/harness/run\\.mjs --plan ${planPattern}$`).test(command)) return;
-    if (new RegExp(`^node tools/exec-plans/complete-plan\\.mjs ${planPattern} --harness \\.tmp/harness-report\\.json --audit \\.tmp/audit-result\\.json --approve sha256:[a-f0-9]{64}$`).test(command)) return;
+    if (new RegExp(`^node tools/exec-plans/complete-plan\\.mjs ${planPattern} --harness \\.tmp/harness-report\\.json(?: --audit \\.tmp/audit-result\\.json)? --approve sha256:[a-f0-9]{64}$`).test(command)) return;
     throw new Error('Only exact canonical lifecycle commands are permitted');
   }
   throw new Error(`Role ${role} denies ${tool}`);

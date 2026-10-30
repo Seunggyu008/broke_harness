@@ -1,0 +1,11 @@
+# Clean up and update project documentation when explicitly invoked by the user
+
+Run only when the user requests /update-docs or explicitly asks for documentation cleanup/update. Do not run automatically after implementation or on a schedule. Optional arguments select a documentation area; without them, inspect the project's maintained documentation.
+
+Read root AGENT.md or AGENTS.md (case-insensitive), ARCHITECTURE.md, docs/INDEX.md, affected docs, and the implementation/manifests needed to verify their claims. Inspect active plans for overlapping documentation, behavior, or assumptions; ask the user to resolve material conflicts before editing those docs. Archived plans are historical evidence, not current specifications.
+
+Reconcile documentation with observable implementation and declared architecture. Correct stale commands, paths, examples, and behavior descriptions. Consolidate duplicated detail under a clear owner, remove obsolete statements, and update the index and inbound links when pages move or merge. For intended features not yet implemented, label intent explicitly rather than describing it as working. Ask about material contradictions between the source instructions, architecture, and code instead of deciding product intent yourself.
+
+Edit README.md, factual descriptions in ARCHITECTURE.md, and maintained Markdown under docs/, excluding docs/exec-plans/. Preserve intended architectural boundaries; ask about material intent changes. Preserve AGENT.md/AGENTS.md, application code, configuration, and historical plans. If their correction is needed, report it for a separately authorized change. Consolidation may remove redundant documentation pages after correcting inbound links; do not remove unique requirements or user content without evidence. In the OpenCode adapter use write/edit or a documentation-only apply_patch; arbitrary shell is unavailable.
+
+Inspect relative links affected by the edits, excluding fenced examples and external URLs. Use an existing documentation checker when available and authorized; do not add CI. Report files created/updated/moved/removed, corrections and their source evidence, verification performed, and unresolved questions. Never claim an unexecuted check passed. Leave all Git actions to the user. This maintenance command does not approve or archive implementation plans.

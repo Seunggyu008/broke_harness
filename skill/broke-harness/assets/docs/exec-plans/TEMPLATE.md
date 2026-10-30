@@ -59,7 +59,7 @@ This section explains the implementation. It does not add edit scope beyond `Har
 - <One concrete observable outcome per top-level bullet>
 - <Include required deterministic coverage or compatibility behavior>
 
-The harness assigns stable-in-order IDs (`AC-1`, `AC-2`, and so on). The structured audit must provide one verified evidence record per ID.
+The harness assigns stable-in-order IDs (`AC-1`, `AC-2`, and so on). The implementation report explains the evidence and remaining uncertainty for each criterion. If the user requests an independent structured audit, it provides one evidence record per ID. Audit is optional.
 
 ## Optional Runtime Checks
 

@@ -1,3 +1,24 @@
+# 0.2 validation ? 2026-10-30 (Asia/Seoul)
+
+Executed on Windows with Node.js v24.14.0. The implementation follows the user-directed bootstrap/report/optional-audit flow; CI configuration is outside scope. The 0.1 record below is historical and does not define the current product contract.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| `npm test` after final functional changes | 76/76 passed; zero skipped/cancelled | `validation/v0.2-full-2026-10-30.log` (ignored local log) |
+| `node --test tests/product-flow.test.mjs` | 7/7 passed | Repeated while implementing the new product branches; included in the final full run |
+| Skill creator `quick_validate.py skill/broke-harness` | Valid | Executed in this session |
+| `node --check` for distributable Node modules | 20 modules valid | Executed in this session; full tests also load generated runtime assets |
+| Configuration documentation example | Valid JSON | Parsed with Python json.loads |
+| `git diff --check` | Passed | Executed with normal repository line-ending settings |
+
+New behavioral coverage includes case-insensitive source document discovery and actual source contents; docs-only folders before Git initialization; content-bound non-mutating previews; harness-only versus explicit full bootstrap; application scaffolding and authored domain docs; existing/ignored project detection; preservation of source files and an existing index; external input paths; owner edits and removal of generated docs surviving reinstallation; completion without audit artifacts; rejection of failed/stale/mismatched evidence and absent approval; retained validation when an audit is supplied; no automatic Git initialization, staging, commit or push; docs-only edits/consolidation patches, protected code/instructions/plan paths and question tools; and JSONC/runtime role collisions without overwriting built-in agents.
+
+The original integration fixtures explicitly select the optional OpenCode adapter. The default portable path is exercised separately. Doctor runs the 56 installed core regressions in a disposable target as part of integration testing. No source files under reference-implementation/ were changed; its previously passing 54-test baseline remains historical reference evidence.
+
+Limits: the agent's interpretation and application design are instruction-driven; fixture blueprints test deterministic installation, not a live model's project-generation quality. Documentation-maintenance tests exercise command delivery and actual policy hooks, not a live agent rewrite of a production documentation tree. Native slash discovery and live OpenCode provider/model/delegation behavior remain unverified. No new dedicated adapter for another runtime is claimed. Portable mode uses existing host permissions and explicitly supports reading command files when native discovery differs. Git is required for regression tests and execution-plan verification, but not for target initialization/installation. No Git mutations were performed in the user's repositories; disposable fixtures create their own baselines.
+
+---
+
 # V0.1 validation record
 
 Executed on Windows with Node.js **v24.14.0**, on **2026-10-27 (Asia/Seoul)**. Commands below run from this repository root. No dependencies or MCP providers were installed. No project commits or pushes were made; disposable test repositories create their own fixture commits and are removed afterward.

@@ -1,13 +1,14 @@
-# Provenance and compatibility changes
+# Provenance and intentional contract changes
 
-The executable runtime and three original suites were copied from the user-supplied reference-implementation/tools. The execution-plan guide/template and four command contracts derive from the same reference. No upstream license was supplied; this bundle does not invent or grant third-party rights. Fingerprints retain the `meport-change-state-v1` domain to preserve normal-file compatibility. Original app names remain only in regression fixtures and that domain separator, not in installed application rules.
+The deterministic runtime and original regression suites derive from the supplied reference-implementation/tools. No upstream license was supplied; this bundle asserts no new third-party rights. The normal-file fingerprint domain remains meport-change-state-v1.
 
-Focused changes:
+0.2 changes the product contract to match the user-directed workflow:
 
-- Git subprocesses resolve on close, after stdout drains; a delayed-output test demonstrates the race deterministically. Git filenames use NUL delimiters and UTF-8 decoding after byte collection. Rename source and destination both participate in scope checking. Symlink fingerprints hash link text rather than target secrets; unsupported control-character paths fail closed.
-- The packaged core loads documentationSync.rules from the target JSON config. The reference retains its original application rules as parity input. Every triggered rule requires a matching documentation update; completion recomputes the evidence from current configuration. Configuration bytes are pinned in start state, so a change invalidates resume.
-- Verification cannot silently alter the worktree or HEAD after the fingerprint is calculated. Such a run fails and requires reconciliation/rerun.
-- Completion requires `--approve <current-change-fingerprint>` in addition to all original evidence gates. This is an explicit owner acknowledgment supplied after a separate-turn approval; it is not a cryptographic identity or conversation verifier. Legacy reports/start states retain their original validation, but a fresh start/harness/audit is recommended after migration.
-- The original start-plan command runs under a dedicated orchestrator and delegates implementation instead of editing itself. Bash is limited to exact lifecycle commands; implement/fix cannot use shell to escape path restrictions. Auditors have default-deny tools, no shell/MCP/delegation, and fresh tasks. The plugin checks tool arguments and persists independent audit receipts. Fix attempts are bounded across sessions. Feedback checkpoints remain explicit owner communication gates, not fabricated machine proof of consent.
+- Installation accepts folders before Git initialization. Source instruction/architecture contents inform an agent-authored project design; deterministic helpers classify, preview, validate, install and diagnose it.
+- A new workspace offers full project bootstrap or harness only. Existing projects receive harness only. User-owned source documents and existing project files are preserved.
+- Portable command skills are the default; OpenCode is optional. Five commands cover writing, implementing, reporting, optional independent auditing, and explicit docs maintenance.
+- Independent auditing is optional. Completion accepts a current passing local harness plus explicit approval. --audit opts into the full pre-existing audit validation contract; no synthetic audit is created for normal completion.
+- /update-docs explicitly reconciles maintained docs with code and documented intent, without implementation or Git mutations.
+- Git setup, commits and pushes remain entirely user-controlled. Local lifecycle checks still depend on an initialized repository, clean starting baseline, immutable contract/criteria, scope, ordered verification and current content fingerprints. No CI setup is generated.
 
-The original regression suites use synthetic audits to exercise artifact validation. Synthetic fixtures never stand in for a real independent audit of application work. The core can be used without OpenCode, but independent runtime orchestration is only supplied by the OpenCode adapter.
+Existing hardening remains: Git collectors wait for close; NUL-delimited paths and both rename sides are scoped; symlink fingerprints do not follow targets; secret/traversal boundaries fail closed; verification mutations invalidate evidence; optional audit evidence is complete, clean, fingerprint-bound and fresh. The reference implementation remains unchanged as historical input. Synthetic audit fixtures validate the opted-in artifact contract only; they never prove a real independent review occurred.
