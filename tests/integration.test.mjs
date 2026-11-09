@@ -148,7 +148,8 @@ test('doctor validates a clean install, installed regression suites, policy tamp
   const result = await doctor(f.root, { tests:true });
   assert.equal(result.status,'PASS',JSON.stringify(result));
   assert.equal(result.tests.status,0,result.tests.stdout + result.tests.stderr);
-  assert.match(result.tests.stdout,/tests 56/);
+  assert.match(result.tests.stdout,/# tests [1-9]\d*\r?\n/);
+  assert.match(result.tests.stdout,/# skipped 0\r?\n/);
   assert.ok((await preview(f.root)).operations.every(o => o.action === 'skip'));
   await f.write('.broke-harness/opencode.json',JSON.stringify({ agent:{} }));
   const broken = await doctor(f.root);
@@ -197,8 +198,13 @@ test('installed lifecycle enforces configured docs, scope, freshness, failure, f
   f.ok('tools/harness/run.mjs','--plan',PLAN);
   report = JSON.parse(await f.read('.tmp/harness-report.json'));
   await f.write('.tmp/audit-result.json',JSON.stringify(syntheticAudit(report)));
-  f.ok('tools/exec-plans/complete-plan.mjs',...args,'--approve',report.changeFingerprint);
+  f.git('config','user.name','Fixture'); f.git('config','user.email','fixture@example.invalid');
+  const head = f.git('rev-parse','HEAD');
+  f.ok('tools/exec-plans/complete-plan.mjs',...args,'--approve',report.changeFingerprint,'--commit-message','feat: export documented value');
   assert.match(await f.read('docs/exec-plans/archive/demo.md'),/Status: `done`/);
+  assert.notEqual(f.git('rev-parse','HEAD'),head);
+  assert.equal(f.git('log','-1','--format=%s'),'feat: export documented value');
+  assert.equal(f.git('status','--porcelain'),'');
 });
 
 test('actual OpenCode plugin hook denies audit writes/shell/MCP/delegation and enforces application scope', async t => {
@@ -309,7 +315,7 @@ test('CLI inspector, approval gate, install and doctor work with space-containin
   const manifest = JSON.parse(dry.stdout);
   const denied = invoke('install.mjs'); assert.equal(denied.status,1); assert.match(denied.stderr,/requires --dry-run review/);
   const installed = invoke('install.mjs',['--approve',manifest.approval]); assert.equal(installed.status,0,installed.stderr);
-  const checked = invoke('doctor.mjs'); assert.equal(checked.status,0,checked.stderr); assert.equal(JSON.parse(checked.stdout).status,'PASS');
+  const checked = invoke('doctor.mjs'); assert.equal(checked.status,0,checked.stdout + checked.stderr); assert.equal(JSON.parse(checked.stdout).status,'PASS');
 });
 
 test('existing runtime role definitions conflict and core refuses symlinked evidence directories', async t => {

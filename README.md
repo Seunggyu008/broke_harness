@@ -38,7 +38,7 @@ Omit --config for the default portable harness. For tailored docs or full bootst
 2. Review and approve its status.
 3. Run /start-plan --plan docs/exec-plans/active/<file>.md using the chosen agent. It implements, verifies, reports and asks about completion or clarification/divergence.
 4. Optionally ask another agent to /start-plan-audit. Independent audit is not required for completion.
-5. Approve marking done and moving the plan locally to archive. The helper validates current evidence; it never commits or pushes.
+5. Approve running the completion gate, marking done, archiving the plan and committing with the proposed descriptive message. Any clear approval in a later message runs the gate and creates the local commit; the agent reports its hash and message. Failed evidence prevents the commit. No push occurs.
 6. Invoke /update-docs explicitly when docs need cleanup, correction or reorganization. It does not run automatically.
 
 Portable mode installs command skills under .agents/skills/ and canonical instructions under .broke-harness/commands/. Native slash discovery depends on the host; ask it to read the command file if needed. OpenCode is an explicit optional adapter, with namespaced roles and policy hooks. Other runtime-specific adapters and live-provider compatibility are not certified.

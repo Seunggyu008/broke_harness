@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { lstat, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ import {
   getChangedFiles,
   getHeadRevision,
   assertSafeRepoPath,
+  runProcess,
 } from "../harness/change-state.mjs";
 import {
   analyzeContractSync,
@@ -84,6 +85,15 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error('Explicit owner completion approval required: pass --approve <current change fingerprint> only after approval in a separate user turn.');
   }
 
+  // HEAD determines whether archival must commit a deletion. A newly staged
+  // plan must instead be removed from the index once its archive is written.
+  const tracking = options.commitMessage ? await Promise.all([
+    runProcess("git", ["--literal-pathspecs", "ls-tree", "-r", "--name-only", "-z", "HEAD", "--", plan.relativePath], repoRoot),
+    runProcess("git", ["--literal-pathspecs", "ls-files", "--cached", "-z", "--", plan.relativePath], repoRoot),
+  ]) : [];
+  const planInHead = Boolean(tracking[0]?.stdout.length);
+  const planInIndex = Boolean(tracking[1]?.stdout.length);
+
   const updatedText = planText.replace(
     /^(- Status:\s*`)[^`]+(`\s*)$/m,
     "$1done$2",
@@ -100,8 +110,42 @@ export async function main(argv = process.argv.slice(2)) {
       `Plan could not be completed and archived to ${archivePlan.relativePath}: ${error.message}`,
     );
   }
+  let gitResult = "No Git mutations were performed.";
+  if (options.commitMessage) {
+    const commitFiles = [...new Set([
+      ...changedFiles.filter(file => file !== plan.relativePath),
+      ...(planInHead ? [plan.relativePath] : []),
+      archivePlan.relativePath,
+    ])];
+    try {
+      const pending = await getChangedFiles(repoRoot);
+      if (await getHeadRevision(repoRoot) !== currentHeadRevision || pending.some(file => file !== plan.relativePath && !commitFiles.includes(file))) {
+        throw new Error("Git baseline or pending paths changed during completion; inspect the repository before committing.");
+      }
+      const fingerprint = await computeChangeFingerprint(repoRoot, commitFiles);
+      const addCandidates = [...new Set([...commitFiles, ...(planInIndex ? [plan.relativePath] : [])])];
+      const indexed = await runProcess("git", ["--literal-pathspecs", "ls-files", "--cached", "-z", "--", ...addCandidates], repoRoot);
+      const indexPaths = new Set(indexed.stdout.split("\0"));
+      const addFiles = [];
+      for (const file of addCandidates) {
+        // Already staged deletions have no index/worktree entry to add again.
+        if (indexPaths.has(file)) { addFiles.push(file); continue; }
+        try { await lstat(path.join(repoRoot, file)); addFiles.push(file); }
+        catch (error) { if (error.code !== "ENOENT") throw error; }
+      }
+      await runProcess("git", ["--literal-pathspecs", "add", "--all", "--", ...addFiles], repoRoot);
+      if (await computeChangeFingerprint(repoRoot, commitFiles) !== fingerprint) {
+        throw new Error("Completed files changed while staging; review and verify them before committing.");
+      }
+      // --only excludes unrelated index entries, including ones staged concurrently.
+      await runProcess("git", ["--literal-pathspecs", "commit", "--only", "-m", options.commitMessage, "--", ...commitFiles], repoRoot);
+      gitResult = `Committed as ${await getHeadRevision(repoRoot)}: ${options.commitMessage}`;
+    } catch (error) {
+      throw new Error(`Completion gate passed and the plan is archived at ${archivePlan.relativePath}, but the Git commit failed: ${error.message} Files and any staging are preserved; inspect Git status and finish the scoped commit without rerunning the completion gate.`);
+    }
+  }
   console.log(
-    `Plan status updated: in-progress -> done and archived to ${archivePlan.relativePath}; harness${audit ? ' and optional audit' : ''} evidence is fresh for ${currentChangeFingerprint}. No Git mutations were performed.`,
+    `Plan status updated: in-progress -> done and archived to ${archivePlan.relativePath}; harness${audit ? ' and optional audit' : ''} evidence is fresh for ${currentChangeFingerprint}. ${gitResult}`,
   );
 }
 
@@ -150,12 +194,21 @@ export function parseArgs(argv) {
       continue;
     }
 
+    if (arg === '--commit-message') {
+      options.commitMessage = requireValue(arg, argv[index + 1]);
+      if (!options.commitMessage.trim() || /[\x00-\x1f\x7f]/.test(options.commitMessage)) {
+        throw new Error('Commit message must be a non-empty single line without control characters.');
+      }
+      index += 1;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
   if (!options.plan || !options.harness) {
     throw new Error(
-      "Usage: node tools/exec-plans/complete-plan.mjs <plan-path> --harness <report-path> [--audit <result-path>] --approve <fingerprint>",
+      "Usage: node tools/exec-plans/complete-plan.mjs <plan-path> --harness <report-path> [--audit <result-path>] --approve <fingerprint> [--commit-message <message>]",
     );
   }
 

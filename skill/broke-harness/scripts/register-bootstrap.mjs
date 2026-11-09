@@ -14,7 +14,7 @@ Run when the user invokes /harness-bootstrap <workspace-path>, or the host's exp
 
 Resolve this skill's scripts and references relative to this installed SKILL.md, independently of the selected workspace. Read [the bootstrap workflow](references/bootstrap.md) and carry it out for the supplied folder. Read its actual AGENT.md/AGENTS.md and ARCHITECTURE.md. For a docs-only workspace ask whether to bootstrap the project plus harness or harness only; wait for the answer. Existing projects receive harness only. Generate project-specific documentation from source evidence and use the deterministic preview/install/doctor helpers. Reuse authorization already given in this conversation.
 
-Preserve source documents, existing application files, credentials and agent settings. Never initialize Git, stage, commit or push. CI configuration is outside scope. Portable commands use the user's chosen agent; OpenCode integration is selected only when requested. Audit is optional. This bootstrap invocation does not start an implementation plan or automatically run documentation maintenance.
+Preserve source documents, existing application files, credentials and agent settings. Bootstrap never initializes Git, stages, commits or pushes. The installed /start-plan workflow may stage and commit only after final completion approval and a passing completion gate. CI configuration is outside scope. Portable commands use the user's chosen agent; OpenCode integration is selected only when requested. Audit is optional. This bootstrap invocation does not start an implementation plan or automatically run documentation maintenance.
 `;
 
 async function collect(directory, prefix, files) {

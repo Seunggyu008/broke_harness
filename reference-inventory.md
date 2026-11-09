@@ -10,7 +10,7 @@ The complete root AGENTS.md and ARCHITECTURE.md were read before implementation.
 | tools/harness/run.mjs | Contract/criteria parsing, actual scope, docs, ordered verification, logs/report. Hardcoded backend/mobile/documentation rules require configuration. Its Git helper has the same stdout race. |
 | tools/exec-plans/plan-state.mjs | Pins HEAD, contract and criteria. Packaged state also pins target configuration. |
 | tools/exec-plans/start-plan.mjs | Clean approved start, scoped resume and legacy adoption. Retained with path/evidence confinement. |
-| tools/exec-plans/complete-plan.mjs | Fresh local evidence, exact criterion records and archival. Packaged CLI additionally requires explicit approval fingerprint. |
+| tools/exec-plans/complete-plan.mjs | Fresh local evidence, exact criterion records and archival. Packaged CLI additionally requires explicit approval fingerprint; --commit-message stages and commits approved paths plus archival only after the gate passes. |
 | Three original test suites | 53 tests covering parsing, verification, forged/stale reports and disposable Git lifecycles. Preserved, with a new delayed-stdout regression. |
 | docs/exec-plans/README.md and TEMPLATE.md | Coordination, sole allowedPaths scope, feedback batch pause, fix limit, later-turn approval. Original mePort.sln/backend/mobile examples replaced by target placeholders. |
 | opencode/commands/write-plan.md | Planner command model conflicts with opencode.jsonc. Resolve once from config; add pre-authoring coordination reminder. |

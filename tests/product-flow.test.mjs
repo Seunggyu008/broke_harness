@@ -162,6 +162,99 @@ test('user-approved completion needs no audit and still rejects missing approval
   assert.equal(f.git('diff','--cached','--name-only'),'');
 });
 
+async function readyToComplete(t, runtime, trackedPlan = false, stagedPlan = false) {
+  const f = await folder(t);
+  const config = {...blueprint, runtime};
+  const p = await preview(f.root, config); await apply(f.root, p.approval, config);
+  f.git('init','-q'); f.git('config','core.autocrlf','false');
+  f.git('config','user.name','Fixture'); f.git('config','user.email','fixture@example.invalid');
+  await f.write('src/remove.mjs','export const obsolete = true;\n');
+  await f.write('src/old (name).mjs','export const renamed = true;\n');
+  if (trackedPlan) await f.write(PLAN, plan);
+  f.commit();
+  if (!trackedPlan) await f.write(PLAN, plan);
+  if (stagedPlan) f.git('add',PLAN);
+  f.ok('tools/exec-plans/start-plan.mjs', PLAN);
+  await f.write('src/main.mjs','export const tasks = ["staged version"];\n');
+  f.git('add','src/main.mjs');
+  await f.write('src/main.mjs','export const tasks = ["reviewed version"];\n');
+  await f.write('src/new [module].mjs','export const added = true;\n');
+  await rm(path.join(f.root,'src/remove.mjs'));
+  f.git('mv','src/old (name).mjs','src/new (name).mjs');
+  await f.write('docs/STORAGE.md','# Storage\n\nTask representation updated.\n');
+  f.ok('tools/harness/run.mjs','--plan',PLAN);
+  const report = JSON.parse(await f.read('.tmp/harness-report.json'));
+  const diff = JSON.parse(await f.read('.tmp/harness-diff.json'));
+  assert.deepEqual(diff.untracked.map(file => file.path),['src/new [module].mjs']);
+  assert.ok(diff.patch.includes('src/old (name).mjs'));
+  return {...f, head:f.git('rev-parse','HEAD'), report};
+}
+
+for (const runtime of ['portable','opencode']) for (const planState of ['new','staged','tracked']) {
+  test(`${runtime} approved completion commits reviewed changes and ${planState} plan archival`, async t => {
+    const trackedPlan = planState === 'tracked';
+    const f = await readyToComplete(t, runtime, trackedPlan, planState === 'staged');
+    const message = 'feat: update task representation';
+    const result = f.ok('tools/exec-plans/complete-plan.mjs', PLAN, '--harness','.tmp/harness-report.json',
+      '--approve',f.report.changeFingerprint,'--commit-message',message);
+    assert.notEqual(f.git('rev-parse','HEAD'),f.head);
+    assert.equal(f.git('log','-1','--format=%s'),message);
+    assert.equal(f.git('status','--porcelain'),'');
+    assert.equal(f.git('show','HEAD:src/main.mjs'),'export const tasks = ["reviewed version"];');
+    const files = f.git('diff-tree','--no-commit-id','--no-renames','--name-only','-r','HEAD').split('\n').sort();
+    assert.deepEqual(files, [
+      ...(trackedPlan ? [PLAN] : []), 'docs/exec-plans/archive/task.md','docs/STORAGE.md',
+      'src/main.mjs','src/new [module].mjs','src/new (name).mjs','src/old (name).mjs','src/remove.mjs',
+    ].sort());
+    assert.match(await f.read('docs/exec-plans/archive/task.md'),/Status: `done`/);
+    assert.ok(result.stdout.includes(f.git('rev-parse','HEAD')));
+    assert.ok(result.stdout.includes(message));
+  });
+}
+
+test('commit mode preserves HEAD, index and active plan when completion approval or evidence fails', async t => {
+  const f = await readyToComplete(t, 'portable');
+  const args = [PLAN,'--harness','.tmp/harness-report.json','--commit-message','fix: update tasks'];
+  const index = f.git('diff','--cached');
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args).stderr,/Explicit owner completion approval/);
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve','wrong').stderr,/Explicit owner completion approval/);
+  await f.write('.tmp/harness-report.json',JSON.stringify({...f.report,status:'FAIL'}));
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',f.report.changeFingerprint).stderr,/passing harness/);
+  await f.write('.tmp/harness-report.json',JSON.stringify({...f.report,generatedAt:'2000-01-01T00:00:00Z'}));
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',f.report.changeFingerprint).stderr,/freshness/);
+  await f.write('.tmp/harness-report.json',JSON.stringify(f.report));
+  assert.equal(f.git('diff','--cached'),index);
+  await f.write('src/main.mjs','export const tasks = ["unreviewed change"];\n');
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',f.report.changeFingerprint).stderr,/contents do not match/);
+  await f.write('unrelated.txt','Unrelated user work\n'); f.git('add','unrelated.txt');
+  const indexWithUnrelated = f.git('diff','--cached');
+  assert.equal(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',f.report.changeFingerprint).status,1);
+  assert.equal(f.git('diff','--cached'),indexWithUnrelated);
+  assert.equal(await f.read('unrelated.txt'),'Unrelated user work\n');
+  assert.equal(f.git('rev-parse','HEAD'),f.head);
+  assert.match(await f.read(PLAN),/Status: `in-progress`/);
+  await assert.rejects(f.read('docs/exec-plans/archive/task.md'),{code:'ENOENT'});
+  assert.ok(index.includes('staged version'));
+});
+
+test('commit hook failure reports successful archival separately and preserves work for scoped recovery', async t => {
+  const f = await readyToComplete(t, 'portable', true);
+  await f.write('.git/hooks/pre-commit','#!/bin/sh\nexit 1\n');
+  const message = 'fix: update task storage';
+  const result = f.run('tools/exec-plans/complete-plan.mjs', PLAN,'--harness','.tmp/harness-report.json',
+    '--approve',f.report.changeFingerprint,'--commit-message',message);
+  assert.equal(result.status,1);
+  assert.match(result.stderr,/Completion gate passed.*Git commit failed/);
+  assert.equal(f.git('rev-parse','HEAD'),f.head);
+  assert.match(await f.read('docs/exec-plans/archive/task.md'),/Status: `done`/);
+  await assert.rejects(f.read(PLAN),{code:'ENOENT'});
+  assert.ok(f.git('diff','--cached','--name-only').includes('src/main.mjs'));
+  await rm(path.join(f.root,'.git/hooks/pre-commit'));
+  f.git('commit','-m',message);
+  assert.equal(f.git('log','-1','--format=%s'),message);
+  assert.equal(f.git('status','--porcelain'),'');
+});
+
 test('OpenCode docs maintenance allows docs-only edits and patches, denies code/source/plan/Git writes, and supports questions', async t => {
   const f = await folder(t);
   const p = await preview(f.root,{runtime:'opencode'}); await apply(f.root,p.approval,{runtime:'opencode'});
@@ -184,6 +277,13 @@ test('OpenCode docs maintenance allows docs-only edits and patches, denies code/
   await hooks['tool.execute.before']({sessionID:'orchestrator',tool:'question'},{args:{questions:[]}});
   const command = `node tools/exec-plans/complete-plan.mjs ${PLAN} --harness .tmp/harness-report.json --approve sha256:${'a'.repeat(64)}`;
   await hooks['tool.execute.before']({sessionID:'orchestrator',tool:'bash'},{args:{command}});
+  const invokeCompletion = command => hooks['tool.execute.before']({sessionID:'orchestrator',tool:'bash'},{args:{command}});
+  await invokeCompletion(command + ' --commit-message "fix: preserve task order"');
+  await invokeCompletion(command.replace(' --approve',' --audit .tmp/audit-result.json --approve') + ' --commit-message "fix: 작업 순서 유지"');
+  for (const message of ['fix: $(whoami)', 'fix: `whoami`', 'fix: %PATH%', 'fix: "escape"', 'fix: bad; git push']) {
+    await assert.rejects(invokeCompletion(command + ` --commit-message "${message}"`));
+  }
+  await assert.rejects(invokeCompletion('git commit -am "unscoped changes"'));
   await assert.rejects(lstat(path.join(f.root,'src')), {code:'ENOENT'});
 });
 

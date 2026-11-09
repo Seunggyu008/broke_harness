@@ -10,7 +10,7 @@ Build a portable Agent Skill matching the user's project-aware bootstrap and exe
 - Generate project-specific structure/docs from those source documents and repository evidence. Keep application-specific mePort rules out of the bundle.
 - Default to portable commands with the user's chosen agent; OpenCode is an optional adapter. Do not claim untested native runtime integration or sandboxing.
 - User/agent authors a draft active plan; user approves; /start-plan implements, verifies, reports and asks about completion. Independent auditing is optional and user-requested. A requested audit must actually be independent; never fabricate it.
-- Explicit approval precedes local done/archive. Git initialization, staging, branches, commits and pushes belong to the user. Deterministic lifecycle checks may inspect Git state and require a clean committed baseline. CI configuration is outside scope.
+- Explicit final approval authorizes the completion gate, local done/archive and a scoped commit with a descriptive message. Ask about these actions together; any later unambiguous approval, regardless of wording, runs them without another approval prompt. Commit only after the gate passes. Git initialization, the initial baseline commit, branches and pushes belong to the user. Deterministic lifecycle checks require a clean committed baseline. CI configuration is outside scope.
 - /update-docs is a separate explicit user command for documentation cleanup/update, not an automatic post-implementation hook.
 
 ## Implementation rules
@@ -23,4 +23,4 @@ Preserve source instruction/architecture files, existing application files, runt
 
 Keep scope, immutable plan/criteria, ordered verification, required docs, content fingerprints, freshness, and owner approval checks. Optional audit artifacts must remain fully validated when supplied. Never treat prompts or post-change scope checks as a sandbox.
 
-Test observable bootstrap branches, optional and audited completion, existing-file preservation, docs-maintenance permissions, configurable runtime roles, path safety and regression behavior in disposable folders/repos. Do not commit/push project changes or delete untracked user files. Do not touch credentials, provider auth stores or install MCP providers.
+Test observable bootstrap branches, optional and audited completion, approved scoped commits, existing-file preservation, docs-maintenance permissions, configurable runtime roles, path safety and regression behavior in disposable folders/repos. Do not commit project changes before final completion approval, push, or delete untracked user files. Do not touch credentials, provider auth stores or install MCP providers.

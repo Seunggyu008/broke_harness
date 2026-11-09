@@ -23,10 +23,10 @@ Read source docs + inspect workspace
 Draft active plan -> user approves -> chosen agent starts/resumes
   -> implement within contract -> deterministic verification -> implementation report
   -> user may request another agent's independent audit
-  -> explicit user completion approval -> validate evidence -> done + local archive
+  -> explicit user completion + commit approval -> validate evidence -> done + local archive -> scoped Git commit
 ```
 
-Git initialization, staging, commits, branches, resets and pushes remain user-controlled. Installation does not require Git; execution-plan verification uses Git diff/HEAD and requires a clean committed starting baseline. A commit during execution invalidates the pinned baseline and requires reconciliation. Archival is a local file move, not a Git operation.
+Git initialization, the initial baseline commit, branches, resets and pushes remain user-controlled. Installation does not require Git; execution-plan verification uses Git diff/HEAD and requires a clean committed starting baseline. Keep implementation uncommitted until completion approval: an earlier commit invalidates the pinned baseline and requires reconciliation. The final question includes completion and a proposed descriptive commit message; any later unambiguous approval authorizes both, regardless of wording. After validation and local archival, complete-plan.mjs with --commit-message stages the approved paths plus archival and creates a local commit. It excludes unrelated index entries. Gate failure prevents Git mutations; Git failure after archival preserves completed files and any staging for recovery. Omitting the option retains archive-only completion when explicitly requested. No push occurs.
 
 ## Runtime boundary
 
@@ -38,7 +38,7 @@ OpenCode is optional. It installs five command bridges, namespaced configurable 
 
 ## Deterministic lifecycle
 
-The core derives from reference-implementation/tools: start-plan, plan-state, run, change-state, and complete-plan. Preserve scope checking, ordered command results, configuration/contract/criteria pinning, content fingerprints, required documentation synchronization and freshness. Completion requires a passing current local report and explicit fingerprint-bound approval. --audit opts into full structured audit validation; absence of audit is valid and never produces fabricated review evidence. The normal-file fingerprint domain remains meport-change-state-v1 for compatibility.
+The core derives from reference-implementation/tools: start-plan, plan-state, run, change-state, and complete-plan. Preserve scope checking, ordered command results, configuration/contract/criteria pinning, content fingerprints, required documentation synchronization and freshness. Completion requires a passing current local report and explicit fingerprint-bound approval. --commit-message adds the approved local commit after the gate and archival; the agent supplies a concise summary of the actual implementation. --audit opts into full structured audit validation; absence of audit is valid and never produces fabricated review evidence. The normal-file fingerprint domain remains meport-change-state-v1 for compatibility.
 
 Original hardening remains: close-based Git output collection, NUL-delimited filenames, both rename paths, symlink/secret boundaries, and verification-mutation rejection. Reference source remains unchanged during this update. No upstream license was supplied; provenance asserts no new rights.
 

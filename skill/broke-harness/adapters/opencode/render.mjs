@@ -18,7 +18,7 @@ export function renderAgents(config) {
     description: 'Coordinate plan implementation, verification, report and user completion approval', mode: 'primary',
     model: `${config.roles.implement.provider}/${config.roles.implement.model}`, temperature: 0.1,
     permission: { ...structuredClone(read), bash: 'ask', edit: { '*': 'deny', '.tmp/audit-result.json': 'allow' }, task: { '*': 'deny', ...Object.fromEntries(['implement','audit','fix'].map(r => [config.roles[r].agent, 'allow'])) }, question: 'allow' },
-    prompt: 'Read .broke-harness/commands/start-plan.md. Delegate application edits, run verification, report, and ask the user about completion or optional audit. Completion requires explicit approval in a later user message. Never require an independent audit unless the user requests it.',
+    prompt: 'Read .broke-harness/commands/start-plan.md. Delegate application edits, run verification, report, and ask the user to approve completion and a local commit with a descriptive message, or request optional audit. After any unambiguous approval in a later user message, regardless of wording, run the completion helper with --commit-message to gate, archive and commit the approved changes. Never require an independent audit unless the user requests it.',
   };
   agents['broke-docs'] = {
     description: 'Update and clean project documentation when explicitly requested', mode: 'primary',

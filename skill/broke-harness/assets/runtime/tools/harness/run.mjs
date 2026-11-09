@@ -145,9 +145,9 @@ async function main() {
     const patch = await runProcess('git', ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', options.base ? `${options.base}...HEAD` : 'HEAD', '--', ...scopeFiles]);
     const untracked = [];
     if (!options.base) {
-      const tracked = await runProcess('git', ['ls-files', '-z']);
-      const trackedSet = new Set(tracked.stdout.split('\0'));
-      for (const file of scopeFiles) if (!trackedSet.has(file)) untracked.push({ path: file, content: await readFile(await assertSafeRepoPath(repoRoot, file), 'utf8') });
+      const others = await runProcess('git', ['ls-files', '--others', '--exclude-standard', '-z']);
+      const untrackedSet = new Set(others.stdout.split('\0'));
+      for (const file of scopeFiles) if (untrackedSet.has(file)) untracked.push({ path: file, content: await readFile(await assertSafeRepoPath(repoRoot, file), 'utf8') });
     }
     await writeFile(await assertSafeRepoPath(repoRoot, '.tmp/harness-diff.json'), JSON.stringify({ changeFingerprint, patch: patch.stdout, untracked }, null, 2) + '\n');
 

@@ -33,6 +33,14 @@ test("parseArgs requires a harness and accepts optional audit artifacts", () => 
   assert.equal(parseArgs([PLAN_PATH, '--harness', '.tmp/harness-report.json']).audit, null);
 });
 
+test('completion accepts a descriptive commit message and rejects blank or multiline messages', () => {
+  const args = [PLAN_PATH, '--harness', '.tmp/harness-report.json', '--approve', FINGERPRINT];
+  assert.equal(parseArgs([...args, '--commit-message', 'fix: preserve task order']).commitMessage, 'fix: preserve task order');
+  for (const message of ['', '   ', 'fix: tasks\nextra line', 'fix: tasks\0']) {
+    assert.throws(() => parseArgs([...args, '--commit-message', message]));
+  }
+});
+
 test('completion validates current harness without inventing optional audit evidence', () => {
   const input = createValidationInput();
   delete input.auditResult;

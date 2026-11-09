@@ -1,3 +1,19 @@
+# Approved completion and commit validation — 2026-11-09 (Asia/Seoul)
+
+Final approval now covers the completion gate, done/archive transition and a scoped local commit with an agent-authored descriptive message. The completion helper accepts --commit-message; omitting it preserves explicit archive-only completion. Bootstrap continues to leave Git unchanged.
+
+- `npm test`: 88/88 passed, zero failures/skips/cancellations. The installation doctor also ran all 57 installed core regressions successfully.
+- `npm run test:reference`: 54/54 passed. Historical reference source remains unchanged.
+- Portable and OpenCode installations committed approved implementation and archival for new, staged and previously committed plans. Fixtures cover partially staged implementation, added files, deleted files, staged renames, spaces and literal bracket characters in paths, exact commit messages and clean final Git state.
+- Missing/wrong approval, failed/stale reports and post-review changes prevented commits and preserved active work and the index. A rejecting commit hook left the plan archived and files staged, reported the commit failure explicitly and allowed recovery without rerunning archival.
+- Audited completion created a commit only after current audit validation. Synthetic OpenCode policy hooks accepted safe quoted messages, including Korean, and rejected shell interpolation and raw Git commands.
+- Staged-rename coverage exposed an existing diff-artifact bug: deleted index paths were mistaken for untracked files. Evidence collection now queries actual untracked files; regression fixtures assert their contents and the rename-source patch.
+- After narrowing the registered bootstrap entry point's Git restriction to bootstrap itself, `node --test tests/bootstrap-command.test.mjs` passed 3/3. Skill creator validation and `git diff --check` passed.
+
+Executed on Windows with Node.js v24.14.0. Git writes occurred only in disposable test repositories. No user repository commit/push or installed user-skill update was performed. Live agent approval interpretation and live OpenCode execution remain instruction-driven and were not independently exercised.
+
+---
+
 # Bootstrap command registration validation ? 2026-10-30
 
 Added a pre-install harness-bootstrap entry point with deterministic registration into a chosen agent configuration directory. Portable registration creates a self-contained skills/harness-bootstrap/ bundle. Optional OpenCode registration also creates commands/harness-bootstrap.md. No target project needs an existing harness.
