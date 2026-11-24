@@ -10,7 +10,7 @@ export const defaults = {
     fix: { agent: 'broke-fix', provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
   },
   documentationSync: { rules: [] },
-  policy: { maxCombinedFixAttempts: 3, requireIndependentAudit: false, auditReadOnly: true, requireCompletionApproval: true },
+  policy: { maxCombinedFixAttempts: 3, requireIndependentAudit: true, auditReadOnly: true, requireCompletionApproval: true },
 };
 function keys(value, allowed, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !allowed.includes(k))) throw new Error(`Unknown or invalid ${label} keys`);

@@ -133,7 +133,7 @@ export async function authorize({ root, config, role, tool, args }) {
     if (typeof command !== 'string' || /[\r\n;&|`$<>]/.test(command)) throw new Error('Arbitrary shell denied');
     const planPattern = 'docs/exec-plans/active/[a-zA-Z0-9._-]+\\.md';
     if (new RegExp(`^node tools/exec-plans/start-plan\\.mjs ${planPattern}$`).test(command) || new RegExp(`^node tools/harness/run\\.mjs --plan ${planPattern}$`).test(command)) return;
-    if (new RegExp(`^node tools/exec-plans/complete-plan\\.mjs ${planPattern} --harness \\.tmp/harness-report\\.json(?: --audit \\.tmp/audit-result\\.json)? --approve sha256:[a-f0-9]{64}(?: --commit-message "[\\p{L}\\p{N}][\\p{L}\\p{N} .,():/_-]{0,119}")?$`, 'u').test(command)) return;
+    if (new RegExp(`^node tools/exec-plans/complete-plan\\.mjs ${planPattern} --harness \\.tmp/harness-report\\.json --audit \\.tmp/audit-result\\.json --approve sha256:[a-f0-9]{64}(?: --commit-message "[\\p{L}\\p{N}][\\p{L}\\p{N} .,():/_-]{0,119}")?$`, 'u').test(command)) return;
     throw new Error('Only exact canonical lifecycle commands are permitted');
   }
   throw new Error(`Role ${role} denies ${tool}`);

@@ -252,6 +252,7 @@ test('actual OpenCode plugin hook denies audit writes/shell/MCP/delegation and e
   await hooks['tool.execute.after']({sessionID:'orchestrator',tool:'task',callID:'audit-call',args},result);
   const receipt = JSON.parse(await f.read('.tmp/broke-audit-receipt.json'));
   await invoke('write',{filePath:'.tmp/audit-result.json',content:receipt.auditJSON});
+  await f.write('.tmp/audit-result.json',receipt.auditJSON);
   await assert.rejects(invoke('write',{filePath:'.tmp/audit-result.json',content:JSON.stringify({...JSON.parse(receipt.auditJSON),summary:'forged'})}),/exactly/);
   await assert.rejects(invoke('task',{subagent_type:config.roles.fix.agent}),/independently confirmed/);
   const fixable = { ...syntheticAudit(report), outcome:'fixable', mustFix:[{id:'F-1',severity:'must-fix',title:'Fixture finding',files:['src/main.mjs'],explanation:'Fixture evidence',fixInstructions:'Change only the fixture value'}] };
@@ -267,6 +268,23 @@ test('actual OpenCode plugin hook denies audit writes/shell/MCP/delegation and e
   const freshHooks = await plugin({directory:f.root,client:{}});
   await freshHooks['chat.params']({sessionID:'resumed',agent:'broke-orchestrator',model:model('implement')});
   await assert.rejects(freshHooks['tool.execute.before']({sessionID:'resumed',tool:'task'},{args:{subagent_type:config.roles.fix.agent}}),/Three combined fix attempts/);
+
+  await hooks['chat.params']({sessionID:'fix',agent:config.roles.fix.agent,model:model('fix')});
+  await hooks['tool.execute.before']({sessionID:'fix',tool:'write'},{args:{filePath:'src/main.mjs'}});
+  await f.write('src/main.mjs','export const value = 3;\n');
+  await f.write('docs/API.md','Value: 3\n');
+  await assert.rejects(invoke('task',args,'stale-audit'),/Fresh passing local harness required/);
+  f.ok('tools/harness/run.mjs','--plan',PLAN);
+  const freshReport = JSON.parse(await f.read('.tmp/harness-report.json'));
+  const completion = [PLAN,'--harness','.tmp/harness-report.json','--audit','.tmp/audit-result.json','--approve',freshReport.changeFingerprint];
+  assert.match(f.fail('tools/exec-plans/complete-plan.mjs',...completion),/Audit result is stale/);
+  await auditResponse(syntheticAudit(freshReport),'audit-after-fixes');
+  const freshReceipt = JSON.parse(await f.read('.tmp/broke-audit-receipt.json'));
+  await invoke('write',{filePath:'.tmp/audit-result.json',content:freshReceipt.auditJSON});
+  await f.write('.tmp/audit-result.json',freshReceipt.auditJSON);
+  await invoke('bash',{command:`node tools/exec-plans/complete-plan.mjs ${completion.join(' ')}`});
+  f.ok('tools/exec-plans/complete-plan.mjs',...completion);
+  assert.match(await f.read('docs/exec-plans/archive/demo.md'),/Status: `done`/);
 });
 
 test('Git filename detection preserves spaces/Unicode and checks both sides of a rename', async t => {

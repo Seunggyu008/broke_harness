@@ -40,8 +40,22 @@ const blueprint = {
   documentationSync: {rules:[{trigger:['src/**'],require:['docs/STORAGE.md']}]},
 };
 const PLAN = 'docs/exec-plans/active/task.md';
+const HARNESS_ARGS = [PLAN, '--harness', '.tmp/harness-report.json'];
+const COMPLETION_ARGS = [...HARNESS_ARGS, '--audit', '.tmp/audit-result.json'];
 const contract = {allowedPaths:['src/**','docs/STORAGE.md'],verify:['node --check src/main.mjs'],requiresDocs:true};
 const plan = '# Task\n- Status: `approved`\n\n## Harness Contract\n\n```json\n' + JSON.stringify(contract) + '\n```\n\n## Acceptance Criteria\n\n- Tasks can be represented by the local module.\n';
+
+async function writeSyntheticAudit(f, report) {
+  await f.write('.tmp/audit-result.json', JSON.stringify({
+    outcome:'clean', mustFix:[], shouldFix:[], acceptableRisk:[], feedbackAssessment:[],
+    summary:'Synthetic completion fixture audit.',
+    planPath:report.planPath, generatedAt:report.generatedAt,
+    harnessGeneratedAt:report.generatedAt, harnessChangeFingerprint:report.changeFingerprint,
+    acceptanceEvidence:report.acceptanceCriteria.map(({id}) => ({
+      criterionId:id, evidenceType:'automated', status:'verified', evidence:'Fixture verification passed.',
+    })),
+  }));
+}
 
 test('a docs-only folder is new, exposes actual source contents, and installs harness-only without Git', async t => {
   const f = await folder(t);
@@ -63,6 +77,11 @@ test('a docs-only folder is new, exposes actual source contents, and installs ha
   await assert.rejects(lstat(path.join(f.root, 'src')), {code:'ENOENT'});
   await assert.rejects(lstat(path.join(f.root, '.opencode')), {code:'ENOENT'});
   for (const name of ['write-plan','start-plan','implement-plan','start-plan-audit','update-docs']) assert.ok((await f.read(`.agents/skills/${name}/SKILL.md`)).startsWith('---\n'));
+  const start = await f.read('.broke-harness/commands/start-plan.md');
+  assert.match(start, /After every passing harness, delegate the audit contract/);
+  assert.match(start, /Continue only with a clean audit/);
+  assert.equal(JSON.parse(await f.read('broke-harness.config.json')).policy.requireIndependentAudit,true);
+  assert.throws(() => resolveConfiguration({policy:{requireIndependentAudit:false}}), /Invariant policy cannot be disabled: requireIndependentAudit/);
   const health = await doctor(f.root);
   assert.equal(health.status, 'PASS', JSON.stringify(health));
   assert.ok(health.warnings.some(w => w.includes('Git is not initialized')));
@@ -129,7 +148,7 @@ test('CLI accepts a no-Git folder and an external agent-authored bootstrap input
   await assert.rejects(lstat(path.join(f.root,'.git')), {code:'ENOENT'});
 });
 
-test('user-approved completion needs no audit and still rejects missing approval, failed checks and stale changes', async t => {
+test('completion requires a current clean audit and explicit approval', async t => {
   const f = await folder(t);
   const p = await preview(f.root, blueprint); await apply(f.root,p.approval,blueprint);
   f.git('init','-q'); f.git('config','core.autocrlf','false'); f.commit();
@@ -137,14 +156,19 @@ test('user-approved completion needs no audit and still rejects missing approval
   await f.write('src/main.mjs','export const tasks = ;\n');
   await f.write('docs/STORAGE.md','# Storage\n\nTask representation updated.\n');
   assert.equal(f.run('tools/harness/run.mjs','--plan',PLAN).status,1);
-  const args = [PLAN,'--harness','.tmp/harness-report.json'];
+  const args = COMPLETION_ARGS;
+  await f.write('.tmp/audit-result.json', JSON.stringify({outcome:'fixable'}));
   assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve','wrong').stderr,/passing harness/);
   await f.write('src/main.mjs','export const tasks = ["Done"];\n');
   f.ok('tools/harness/run.mjs','--plan',PLAN);
   let report = JSON.parse(await f.read('.tmp/harness-report.json'));
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',report.changeFingerprint).stderr,/clean structured audit/);
+  await rm(path.join(f.root,'.tmp/audit-result.json'));
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...HARNESS_ARGS,'--approve',report.changeFingerprint).stderr,/--audit <result-path>/);
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',report.changeFingerprint).stderr,/Audit result could not be read/);
+  await assert.rejects(f.read('docs/exec-plans/archive/task.md'),{code:'ENOENT'});
+  await writeSyntheticAudit(f, report);
   assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args).stderr,/Explicit owner completion approval/);
-  await f.write('.tmp/audit-result.json', JSON.stringify({outcome:'fixable'}));
-  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--audit','.tmp/audit-result.json','--approve',report.changeFingerprint).stderr,/clean structured audit/);
   await f.write('src/main.mjs','export const tasks = ["Changed after review"];\n');
   assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',report.changeFingerprint).stderr,/contents do not match/);
   await f.write('src/main.mjs','export const tasks = ["Done"];\n');
@@ -153,11 +177,11 @@ test('user-approved completion needs no audit and still rejects missing approval
   assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',report.changeFingerprint).stderr,/freshness/);
   f.ok('tools/harness/run.mjs','--plan',PLAN); report = JSON.parse(await f.read('.tmp/harness-report.json'));
   const head = f.git('rev-parse','HEAD');
-  await rm(path.join(f.root,'.tmp/audit-result.json'));
+  assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve',report.changeFingerprint).stderr,/different harness run/);
+  await writeSyntheticAudit(f, report);
   f.ok('tools/exec-plans/complete-plan.mjs',...args,'--approve',report.changeFingerprint);
   assert.match(await f.read('docs/exec-plans/archive/task.md'),/Status: `done`/);
   await assert.rejects(lstat(path.join(f.root,PLAN)), {code:'ENOENT'});
-  await assert.rejects(lstat(path.join(f.root,'.tmp/audit-result.json')), {code:'ENOENT'});
   assert.equal(f.git('rev-parse','HEAD'),head);
   assert.equal(f.git('diff','--cached','--name-only'),'');
 });
@@ -184,6 +208,7 @@ async function readyToComplete(t, runtime, trackedPlan = false, stagedPlan = fal
   await f.write('docs/STORAGE.md','# Storage\n\nTask representation updated.\n');
   f.ok('tools/harness/run.mjs','--plan',PLAN);
   const report = JSON.parse(await f.read('.tmp/harness-report.json'));
+  await writeSyntheticAudit(f, report);
   const diff = JSON.parse(await f.read('.tmp/harness-diff.json'));
   assert.deepEqual(diff.untracked.map(file => file.path),['src/new [module].mjs']);
   assert.ok(diff.patch.includes('src/old (name).mjs'));
@@ -195,7 +220,7 @@ for (const runtime of ['portable','opencode']) for (const planState of ['new','s
     const trackedPlan = planState === 'tracked';
     const f = await readyToComplete(t, runtime, trackedPlan, planState === 'staged');
     const message = 'feat: update task representation';
-    const result = f.ok('tools/exec-plans/complete-plan.mjs', PLAN, '--harness','.tmp/harness-report.json',
+    const result = f.ok('tools/exec-plans/complete-plan.mjs', ...COMPLETION_ARGS,
       '--approve',f.report.changeFingerprint,'--commit-message',message);
     assert.notEqual(f.git('rev-parse','HEAD'),f.head);
     assert.equal(f.git('log','-1','--format=%s'),message);
@@ -214,7 +239,7 @@ for (const runtime of ['portable','opencode']) for (const planState of ['new','s
 
 test('commit mode preserves HEAD, index and active plan when completion approval or evidence fails', async t => {
   const f = await readyToComplete(t, 'portable');
-  const args = [PLAN,'--harness','.tmp/harness-report.json','--commit-message','fix: update tasks'];
+  const args = [...COMPLETION_ARGS,'--commit-message','fix: update tasks'];
   const index = f.git('diff','--cached');
   assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args).stderr,/Explicit owner completion approval/);
   assert.match(f.run('tools/exec-plans/complete-plan.mjs',...args,'--approve','wrong').stderr,/Explicit owner completion approval/);
@@ -241,7 +266,7 @@ test('commit hook failure reports successful archival separately and preserves w
   const f = await readyToComplete(t, 'portable', true);
   await f.write('.git/hooks/pre-commit','#!/bin/sh\nexit 1\n');
   const message = 'fix: update task storage';
-  const result = f.run('tools/exec-plans/complete-plan.mjs', PLAN,'--harness','.tmp/harness-report.json',
+  const result = f.run('tools/exec-plans/complete-plan.mjs', ...COMPLETION_ARGS,
     '--approve',f.report.changeFingerprint,'--commit-message',message);
   assert.equal(result.status,1);
   assert.match(result.stderr,/Completion gate passed.*Git commit failed/);
@@ -275,11 +300,12 @@ test('OpenCode docs maintenance allows docs-only edits and patches, denies code/
   await assert.rejects(invoke('bash',{command:'git push'}),/denies bash/);
   await hooks['chat.params']({sessionID:'orchestrator',agent:'broke-orchestrator',model:{providerID:config.roles.implement.provider,id:config.roles.implement.model}});
   await hooks['tool.execute.before']({sessionID:'orchestrator',tool:'question'},{args:{questions:[]}});
-  const command = `node tools/exec-plans/complete-plan.mjs ${PLAN} --harness .tmp/harness-report.json --approve sha256:${'a'.repeat(64)}`;
-  await hooks['tool.execute.before']({sessionID:'orchestrator',tool:'bash'},{args:{command}});
   const invokeCompletion = command => hooks['tool.execute.before']({sessionID:'orchestrator',tool:'bash'},{args:{command}});
+  const command = `node tools/exec-plans/complete-plan.mjs ${COMPLETION_ARGS.join(' ')} --approve sha256:${'a'.repeat(64)}`;
+  await assert.rejects(invokeCompletion(command.replace(' --audit .tmp/audit-result.json','')), /Only exact canonical lifecycle commands/);
+  await invokeCompletion(command);
   await invokeCompletion(command + ' --commit-message "fix: preserve task order"');
-  await invokeCompletion(command.replace(' --approve',' --audit .tmp/audit-result.json --approve') + ' --commit-message "fix: 작업 순서 유지"');
+  await invokeCompletion(command + ' --commit-message "fix: 작업 순서 유지"');
   for (const message of ['fix: $(whoami)', 'fix: `whoami`', 'fix: %PATH%', 'fix: "escape"', 'fix: bad; git push']) {
     await assert.rejects(invokeCompletion(command + ` --commit-message "${message}"`));
   }

@@ -13,7 +13,7 @@ const HARNESS_TIME = "2026-07-28T10:00:00.000Z";
 const AUDIT_TIME = "2026-07-28T10:05:00.000Z";
 const NOW = Date.parse("2026-07-28T10:10:00.000Z");
 
-test("parseArgs requires a harness and accepts optional audit artifacts", () => {
+test("parseArgs requires both harness and audit artifacts", () => {
   assert.deepEqual(
     parseArgs([
       PLAN_PATH,
@@ -30,32 +30,31 @@ test("parseArgs requires a harness and accepts optional audit artifacts", () => 
   );
 
   assert.throws(() => parseArgs([PLAN_PATH]), /--harness/);
-  assert.equal(parseArgs([PLAN_PATH, '--harness', '.tmp/harness-report.json']).audit, null);
+  assert.throws(() => parseArgs([PLAN_PATH, '--harness', '.tmp/harness-report.json']), /--audit/);
 });
 
 test('completion accepts a descriptive commit message and rejects blank or multiline messages', () => {
-  const args = [PLAN_PATH, '--harness', '.tmp/harness-report.json', '--approve', FINGERPRINT];
+  const args = [PLAN_PATH, '--harness', '.tmp/harness-report.json', '--audit', '.tmp/audit-result.json', '--approve', FINGERPRINT];
   assert.equal(parseArgs([...args, '--commit-message', 'fix: preserve task order']).commitMessage, 'fix: preserve task order');
   for (const message of ['', '   ', 'fix: tasks\nextra line', 'fix: tasks\0']) {
     assert.throws(() => parseArgs([...args, '--commit-message', message]));
   }
 });
 
-test('completion validates current harness without inventing optional audit evidence', () => {
+test('completion rejects missing, null, and malformed audit evidence', () => {
   const input = createValidationInput();
-  delete input.auditResult;
-  assert.doesNotThrow(() => validateCompletionArtifacts(input));
+  for (const auditResult of [undefined, null, [], 'clean']) {
+    assert.throws(() => validateCompletionArtifacts({ ...input, auditResult }), /requires a structured audit JSON object/);
+  }
   input.harnessReport.verification[0].exitCode = 1;
   assert.throws(() => validateCompletionArtifacts(input), /every required verification/);
 });
 
-test('unaudited completion still requires ordered acceptance criteria and fresh evidence', () => {
+test('audited completion requires ordered acceptance criteria and fresh evidence', () => {
   const input = createValidationInput();
-  delete input.auditResult;
   input.harnessReport.acceptanceCriteria = [];
   assert.throws(() => validateCompletionArtifacts(input), /unique ordered AC IDs/);
   const stale = createValidationInput();
-  delete stale.auditResult;
   stale.nowMs = Date.parse('2026-07-30T10:10:00.000Z');
   assert.throws(() => validateCompletionArtifacts(stale), /freshness window/);
 });

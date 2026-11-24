@@ -36,12 +36,12 @@ Omit --config for the default portable harness. For tailored docs or full bootst
 
 1. Ask an agent to /write-plan, or create a draft in docs/exec-plans/active/ using the template.
 2. Review and approve its status.
-3. Run /start-plan --plan docs/exec-plans/active/<file>.md using the chosen agent. It implements, verifies, reports and asks about completion or clarification/divergence.
-4. Optionally ask another agent to /start-plan-audit. Independent audit is not required for completion.
+3. Run /start-plan --plan docs/exec-plans/active/<file>.md using the chosen agent. It implements the plan, runs the harness and delegates a fresh read-only audit after verification passes.
+4. The fixer addresses confirmed in-scope findings. The orchestrating agent reruns verification and the audit after edits, then reports the clean result and requests completion approval.
 5. Approve running the completion gate, marking done, archiving the plan and committing with the proposed descriptive message. Any clear approval in a later message runs the gate and creates the local commit; the agent reports its hash and message. Failed evidence prevents the commit. No push occurs.
 6. Invoke /update-docs explicitly when docs need cleanup, correction or reorganization. It does not run automatically.
 
-Portable mode installs command skills under .agents/skills/ and canonical instructions under .broke-harness/commands/. Native slash discovery depends on the host; ask it to read the command file if needed. OpenCode is an explicit optional adapter, with namespaced roles and policy hooks. Other runtime-specific adapters and live-provider compatibility are not certified.
+Portable mode installs command skills under .agents/skills/ and canonical instructions under .broke-harness/commands/. Native slash discovery depends on the host. The chosen host needs independent read-only audit and fixer delegation to run /start-plan. OpenCode is an explicit optional adapter, with namespaced roles and policy hooks. Other runtime-specific adapters and live-provider compatibility are not certified.
 
 ## Development
 
@@ -52,4 +52,4 @@ npm test
 npm run test:reference
 ```
 
-Tests use disposable folders/repos and synthetic optional audit fixtures; they do not prove a real independent audit or live OpenCode run. See VALIDATION.md, ARCHITECTURE.md and reference-inventory.md. Generated project docs/scaffold become owner-editable; immutable runtime assets remain hash-checked. Existing 0.1 installations require manual conflict reconciliation rather than automatic overwrite. Windows is the exercised platform; other platforms need validation. No upstream reference license was supplied.
+Tests exercise the completion gate and OpenCode hooks in disposable repositories with synthetic audit results. See VALIDATION.md, ARCHITECTURE.md and reference-inventory.md. Generated project docs and scaffold become owner-editable. Immutable runtime assets remain hash-checked. Existing installations require manual reconciliation of the updated harness files and configuration. Windows is the exercised platform. No upstream reference license was supplied.

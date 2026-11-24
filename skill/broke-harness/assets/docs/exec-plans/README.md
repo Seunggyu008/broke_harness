@@ -4,8 +4,8 @@ Read AGENT.md or AGENTS.md and ARCHITECTURE.md, then use docs/INDEX.md to select
 
 1. Ask an agent to write a plan using TEMPLATE.md, or author it manually. Review all active plans first; resolve material conflicts in paths, behavior or assumptions with the user before choosing an ordering. Record coordination in the plan.
 2. The user reviews and changes the plan status from draft to approved.
-3. Invoke /start-plan --plan docs/exec-plans/active/<file>.md with the chosen agent. It implements, verifies, reports results and asks whether to run the completion gate, mark done/archive and commit with a proposed descriptive message. Clarification or divergence requires user direction before dependent changes.
-4. The user can request an independent audit by another agent, or approve completion directly. Audit is optional. A request for review is not completion approval.
+3. Invoke /start-plan --plan docs/exec-plans/active/<file>.md with a host that supports independent read-only audit and fixer delegation. The command implements the plan, runs verification and delegates a fresh audit after the harness passes. Clarification or divergence requires user direction before dependent changes.
+4. The fixer addresses confirmed, in-scope findings. The agent reruns verification and delegates a fresh audit after edits. With a clean audit, it reports the results and asks whether to run the completion gate, archive the plan as done and commit with a proposed descriptive message.
 5. Any unambiguous approval in a later message authorizes the completion gate and local commit, regardless of wording. No specific word or phrase is required. The helper validates current evidence, marks done, moves the plan locally to archive, then stages and commits only the approved changed files plus archival. The agent reports the archive path, commit hash and message. A failed gate never commits; declined approval leaves work in-progress. An explicit archive-only request omits --commit-message.
 
 ## Contract
@@ -19,12 +19,12 @@ Installation can precede Git. Before starting a real plan, the user initializes 
 ```text
 node tools/exec-plans/start-plan.mjs docs/exec-plans/active/<file>.md
 node tools/harness/run.mjs --plan docs/exec-plans/active/<file>.md
-node tools/exec-plans/complete-plan.mjs docs/exec-plans/active/<file>.md --harness .tmp/harness-report.json --approve <current-change-fingerprint> --commit-message "<implementation summary>"
+node tools/exec-plans/complete-plan.mjs docs/exec-plans/active/<file>.md --harness .tmp/harness-report.json --audit .tmp/audit-result.json --approve <current-change-fingerprint> --commit-message "<implementation summary>"
 ```
 
-The harness writes .tmp/harness-report.json, .tmp/harness-summary.md, scoped diff evidence and command logs. Passing labels cannot override failed command details, scope divergence or missing docs. Completion rechecks the current plan, contract, HEAD, fingerprint, ordered results and 24-hour freshness. Changes invalidate evidence and require a new report and approval. Comparison-only reports cannot complete a plan. If Git fails after archival, the helper reports that completion passed but the commit failed, preserving files and any staging. Resolve the cause and finish the scoped commit without rerunning archival; never claim a failed commit succeeded.
+The harness writes .tmp/harness-report.json, .tmp/harness-summary.md, scoped diff evidence and command logs. Passing labels cannot override failed command details, scope divergence or missing docs. Completion rechecks the current plan, contract, HEAD, fingerprint, ordered results and 24-hour freshness. Changes invalidate evidence and require a new harness run, a fresh audit and approval. Comparison-only reports cannot complete a plan. If Git fails after archival, the helper reports that completion passed but the commit failed, preserving files and any staging. Resolve the cause and finish the scoped commit without rerunning archival; never claim a failed commit succeeded.
 
-If the user requests structured independent review, use /start-plan-audit and add --audit .tmp/audit-result.json to completion. Supplied audits require clean findings, criterion evidence, matching fingerprints and freshness. Without --audit no audit file is required, read or fabricated. Missing browser/device execution is recorded honestly as residual uncertainty.
+The audit must have empty finding arrays, verified evidence for every criterion and the current harness run's timestamp and fingerprint. Record missing browser or device observation as residual uncertainty.
 
 /update-docs is separately user-invoked for maintained documentation cleanup. It does not rewrite execution-plan history or silently change approved contracts. Before archival, account for inbound links to the active plan within authorized scope.
 

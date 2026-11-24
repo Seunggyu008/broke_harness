@@ -21,8 +21,8 @@ Read source docs + inspect workspace
   -> author project-specific docs/scaffold -> preview -> install -> verify
 
 Draft active plan -> user approves -> chosen agent starts/resumes
-  -> implement within contract -> deterministic verification -> implementation report
-  -> user may request another agent's independent audit
+  -> implement within contract -> deterministic verification -> fresh read-only audit
+  -> fix confirmed findings, rerun verification and audit as needed -> completion report
   -> explicit user completion + commit approval -> validate evidence -> done + local archive -> scoped Git commit
 ```
 
@@ -34,11 +34,11 @@ The pre-install `/harness-bootstrap <workspace-path>` entry point is registered 
 
 Portable mode is default. Canonical command instructions live in .broke-harness/commands/, with discoverable .agents/skills/<command>/SKILL.md wrappers. Hosts may expose these as slash commands or require an explicit skill/file invocation. This is portable instruction delivery, not a claim of native hooks or permission parity across runtimes. Actual access controls come from the chosen host.
 
-OpenCode is optional. It installs five command bridges, namespaced configurable roles, and a policy plugin. The orchestrator delegates application edits and runs lifecycle commands. The optional auditor is shell-free/read-only and cannot delegate. A dedicated docs agent edits maintained Markdown only; application roles remain scoped to the pinned plan. Existing agent collisions refuse rather than overwrite effective settings. Question tools are allowed for non-audit roles. Live plugin/model/delegation compatibility needs target validation; hook tests use synthetic task results.
+OpenCode is optional. It installs five command bridges, namespaced configurable roles, and a policy plugin. The orchestrator delegates application edits and runs lifecycle commands. The independent auditor is shell-free and read-only. The orchestrator uses a fresh audit task after every passing harness. A dedicated docs agent edits maintained Markdown only; application roles remain scoped to the pinned plan. Existing agent collisions refuse rather than overwrite effective settings. Question tools are allowed for non-audit roles. Live plugin/model/delegation compatibility needs target validation; hook tests use synthetic task results.
 
 ## Deterministic lifecycle
 
-The core derives from reference-implementation/tools: start-plan, plan-state, run, change-state, and complete-plan. Preserve scope checking, ordered command results, configuration/contract/criteria pinning, content fingerprints, required documentation synchronization and freshness. Completion requires a passing current local report and explicit fingerprint-bound approval. --commit-message adds the approved local commit after the gate and archival; the agent supplies a concise summary of the actual implementation. --audit opts into full structured audit validation; absence of audit is valid and never produces fabricated review evidence. The normal-file fingerprint domain remains meport-change-state-v1 for compatibility.
+The core derives from reference-implementation/tools: start-plan, plan-state, run, change-state, and complete-plan. Preserve scope checking, ordered command results, configuration/contract/criteria pinning, content fingerprints, required documentation synchronization and freshness. Completion requires a current passing local report, a clean structured audit bound to that report, and explicit fingerprint-bound approval. --commit-message adds the approved local commit after the gate and archival; the agent supplies a concise summary of the actual implementation. --audit supplies the required audit artifact. Both runtimes use the same completion gate. Portable execution requires a host with independent read-only audit and fixer delegation. The normal-file fingerprint domain remains meport-change-state-v1 for compatibility.
 
 Original hardening remains: close-based Git output collection, NUL-delimited filenames, both rename paths, symlink/secret boundaries, and verification-mutation rejection. Reference source remains unchanged during this update. No upstream license was supplied; provenance asserts no new rights.
 
