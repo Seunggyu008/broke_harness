@@ -1,4 +1,4 @@
-# Architecture ? broke-harness 0.2
+# Architecture ? broke-harness 0.3
 
 ## Purpose
 
@@ -9,6 +9,7 @@ A project-aware skill reads user-created AGENT.md/AGENTS.md and ARCHITECTURE.md,
 - The agent reads source instructions, architecture and relevant code, chooses documentation ownership and verification, and authors project-specific text and optional scaffold in a configuration input.
 - inspect.mjs inventories a Git repository or ordinary folder without executing discovered commands, returns source document contents, classifies new/existing, and signals whether the full-bootstrap choice is needed.
 - install.mjs resolves portable/opencode runtime and harness/project mode, renders static core plus agent-authored project files, produces exact diffs and a content-bound approval token, and applies only non-conflicting operations.
+- update.mjs renders the current bundle against the installed project configuration. It checks managed files against their prior manifest hashes, previews replacements and removals, and refreshes the manifest after the reviewed upgrade.
 - doctor.mjs checks immutable installation files, configuration, syntax, optional OpenCode policy, idempotency and installed core tests. No-Git workspaces are valid installs, with a warning about the later lifecycle baseline.
 - Generated project docs/scaffold are mutable owner files. Harness runtime, commands and policy are immutable installation assets. Reinstallation preserves later owner edits to generated project files.
 
@@ -30,7 +31,7 @@ Git initialization, the initial baseline commit, branches, resets and pushes rem
 
 ## Runtime boundary
 
-The pre-install `/harness-bootstrap <workspace-path>` entry point is registered separately using scripts/register-bootstrap.mjs. Registration previews and installs a self-contained skills/harness-bootstrap/ bundle into the selected agent configuration directory. OpenCode additionally receives commands/harness-bootstrap.md referencing the copied skill. It preserves existing settings, refuses collisions and needs no target-project harness. A missing path prompts the user; the whole argument is a single path. Host skill invocation syntax may differ from slash commands.
+The `broke_harness` entry point is registered using scripts/register.mjs. Registration previews and installs a self-contained skills/broke-harness/ bundle into the selected agent configuration directory. OpenCode also receives commands/broke_harness.md pointing to the installed skill. The `init` and `update` subcommands accept one optional workspace path, including spaces. A bare invocation uses current conversation context to route shorthand commands. The entry point does not require an existing project harness.
 
 Portable mode is default. Canonical command instructions live in .broke-harness/commands/, with discoverable .agents/skills/<command>/SKILL.md wrappers. Hosts may expose these as slash commands or require an explicit skill/file invocation. This is portable instruction delivery, not a claim of native hooks or permission parity across runtimes. Actual access controls come from the chosen host.
 
@@ -48,4 +49,4 @@ Original hardening remains: close-based Git output collection, NUL-delimited fil
 
 ## Installation boundaries and limits
 
-Generated paths reject traversal, secrets, protected source documents and harness infrastructure. Existing-file conflicts are never force-overwritten. Preview hashes include the current source document contents and target state. Exclusive creation and rechecks reduce routine clobber; hostile concurrent filesystem-parent replacement is outside portable Node guarantees. Install in a quiescent owner-controlled folder. Updates/merges/uninstall remain manual. Portable prompts do not enforce permissions, and approved verification commands execute trusted code. Approval flags cannot authenticate a human or prove a conversation turn. Node 22+ is intended; platform and live-runtime claims must match actual tests.
+Generated paths reject traversal, secrets, protected source documents and harness infrastructure. Existing-file conflicts require reconciliation. Preview hashes include the current source document contents and target state. Upgrades preserve project-owned files and use the previous manifest to recognize managed files eligible for replacement or removal. A lock serializes upgrade writes, and failures trigger rollback of completed changes. Exclusive creation and rechecks reduce routine clobber in a quiescent owner-controlled folder. Portable prompts do not enforce permissions, and approved verification commands execute trusted code. Approval flags cannot authenticate a human or prove a conversation turn. Node 22+ is intended; platform and live-runtime claims must match actual tests.

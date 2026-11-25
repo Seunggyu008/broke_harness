@@ -16,4 +16,6 @@ Completion requires a clean, complete, fresh audit matching the current passing 
 
 /update-docs is a separate, explicitly user-invoked maintenance command. It cleans maintained docs and updates their index/links from repository evidence. It never runs automatically after a plan and does not modify application code or historical plans.
 
+Invoke `broke_harness` once to use bare workflow command names during the current agent conversation. Refresh the installed harness from the current skill bundle with `broke_harness update`.
+
 Portable mode installs .agents/skills/<command>/SKILL.md plus canonical instructions in .broke-harness/commands/. Use the host's normal skill invocation or explicitly ask it to follow the file if slash discovery differs. The host's actual tools/permissions govern access; this mode does not install a sandbox. The optional OpenCode adapter supplies five command bridges, dedicated namespaced roles, and policy hooks. Both runtimes require independent audit and fixer delegation. OpenCode also delegates application writes. Live OpenCode compatibility must be verified in the target environment. CI setup is out of scope.

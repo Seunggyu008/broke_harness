@@ -4,11 +4,11 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, lstat } from 'node:fs
 import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
-import { preview, apply } from '../skill/broke-harness/lib/manifest.mjs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { preview, apply, version } from '../skill/broke-harness/lib/manifest.mjs';
 import { inspect } from '../skill/broke-harness/lib/profile.mjs';
 import { resolveConfiguration } from '../skill/broke-harness/lib/configuration.mjs';
-import { workspace, parseJSONC } from '../skill/broke-harness/lib/safe-files.mjs';
+import { workspace, parseJSONC, hash, json } from '../skill/broke-harness/lib/safe-files.mjs';
 import { doctor } from '../skill/broke-harness/scripts/doctor.mjs';
 
 async function folder(t) {
@@ -132,6 +132,69 @@ test('existing project receives harness only; source, application, and existing 
   assert.equal(await f.read('src/main.mjs'), 'export const owner = true;\n');
   assert.equal(await f.read('docs/INDEX.md'), '# Owner index\n');
   assert.equal(await f.read('agent.md'), '# Instructions\nA small task tracker. Preserve user tasks.\n');
+});
+
+test('update refreshes an older installation, preserves project assets and refuses stale or conflicting upgrades', async t => {
+  const f = await folder(t);
+  const script = fileURLToPath(new URL('../skill/broke-harness/scripts/update.mjs', import.meta.url));
+  const run = (...args) => spawnSync(process.execPath, [script, '--target', f.root, ...args], { encoding: 'utf8' });
+  const updatePreview = () => {
+    const result = run('--dry-run');
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  assert.match(run('--dry-run').stderr, /requires an installed harness/);
+  const config = { ...blueprint, runtime: 'opencode' };
+  const initial = await preview(f.root, config);
+  await apply(f.root, initial.approval, config);
+
+  const manifestPath = '.broke-harness/manifest.json';
+  const manifest = JSON.parse(await f.read(manifestPath));
+  manifest.version = '0.2.0';
+  const runtimeFile = '.broke-harness/lib/configuration.mjs';
+  const originalRuntime = await f.read(runtimeFile);
+  const obsoleteFile = '.broke-harness/commands/old-workflow.md';
+  const missingFile = '.broke-harness/commands/write-plan.md';
+  const ownerFiles = {
+    'src/main.mjs': 'export const tasks = ["owner edit"];\n',
+    'docs/STORAGE.md': '# Owner documentation\n',
+    [PLAN]: plan,
+    'docs/exec-plans/archive/old.md': '# Archived plan\n',
+    'broke-harness.config.json': (await f.read('broke-harness.config.json')) + '\n',
+  };
+  for (const [file, content] of Object.entries(ownerFiles)) await f.write(file, content);
+  for (const file of [runtimeFile, obsoleteFile]) {
+    await f.write(file, '// Prior release\n');
+    manifest.files[file] = hash('// Prior release\n');
+  }
+  await rm(path.join(f.root, missingFile));
+  await f.write(manifestPath, json(manifest));
+
+  const proposed = updatePreview();
+  const actions = Object.fromEntries(proposed.operations.map(({ path, action }) => [path, action]));
+  assert.equal(actions[runtimeFile], 'replace');
+  assert.equal(actions[obsoleteFile], 'remove');
+  assert.equal(actions[missingFile], 'create');
+  assert.equal(await f.read(runtimeFile), '// Prior release\n');
+  await f.write(runtimeFile, '// Local customization\n');
+  assert.match(run('--approve', proposed.approval).stderr, /does not match/);
+  const conflicted = updatePreview();
+  assert.ok(conflicted.conflicts.includes(runtimeFile));
+  assert.match(run('--approve', conflicted.approval).stderr, /Update conflicts/);
+  assert.equal(await f.read(obsoleteFile), '// Prior release\n');
+
+  await f.write(runtimeFile, '// Prior release\n');
+  const result = run('--approve', updatePreview().approval);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).removed, [obsoleteFile]);
+  assert.equal(await f.read(runtimeFile), originalRuntime);
+  assert.equal(JSON.parse(await f.read(manifestPath)).version, version);
+  await assert.rejects(lstat(path.join(f.root, obsoleteFile)), { code: 'ENOENT' });
+  await assert.rejects(lstat(path.join(f.root, '.git')), { code: 'ENOENT' });
+  for (const [file, content] of Object.entries(ownerFiles)) assert.equal(await f.read(file), content);
+  assert.ok(updatePreview().operations.every(op => op.action === 'skip'));
+  const health = await doctor(f.root);
+  assert.equal(health.status, 'PASS', JSON.stringify(health));
 });
 
 test('CLI accepts a no-Git folder and an external agent-authored bootstrap input without generating Git state', async t => {

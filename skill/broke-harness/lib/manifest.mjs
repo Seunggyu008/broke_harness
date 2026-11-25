@@ -1,20 +1,41 @@
-import { mkdir, writeFile, unlink, appendFile } from 'node:fs/promises';
+import { mkdir, writeFile, unlink, appendFile, lstat, rename, open } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { inspect } from './profile.mjs';
 import { render } from './render.mjs';
 import { resolveConfiguration } from './configuration.mjs';
 import { hash, json, readOptional, safePath, parseJSONC } from './safe-files.mjs';
 
+const manifestPath = '.broke-harness/manifest.json';
+export const version = '0.3.0';
+
 function diff(file, before, after) {
   if (before === after) return '';
-  return `--- a/${file}\n+++ b/${file}\n@@ -1,${before?.split('\n').length ?? 0} +1,${after.split('\n').length} @@\n` + (before === null ? '' : before.split('\n').map(l => '-' + l).join('\n') + '\n') + after.split('\n').map(l => '+' + l).join('\n') + '\n';
+  return `--- a/${file}\n+++ b/${file}\n@@ -1,${before?.split('\n').length ?? 0} +1,${after?.split('\n').length ?? 0} @@\n` + (before === null ? '' : before.split('\n').map(l => '-' + l).join('\n') + '\n') + (after === null ? '' : after.split('\n').map(l => '+' + l).join('\n') + '\n');
 }
-export async function preview(root, input) {
+const contentHash = content => content === null ? null : hash(content);
+const operation = (file, before, after, action) => ({
+  path: file, action, beforeHash: contentHash(before), afterHash: contentHash(after), diff: diff(file, before, after), content: after,
+});
+const managedPaths = [
+  /^\.broke-harness\/(?:commands\/[^/]+\.md|lib\/[^/]+\.mjs|adapters\/opencode\/[^/]+\.mjs|opencode\.json|provenance\.json|WORKFLOW\.md)$/,
+  /^\.agents\/skills\/[^/]+\/(?:SKILL\.md|agents\/openai\.yaml)$/,
+  /^\.opencode\/(?:commands\/[^/]+\.md|plugins\/broke-harness\.m?js)$/,
+  /^tools\/(?:harness|exec-plans)\/[^/]+\.mjs$/,
+  /^docs\/exec-plans\/(?:README\.md|TEMPLATE\.md|(?:active|archive)\/\.gitkeep)$/,
+];
+const managedPath = file => managedPaths.some(pattern => pattern.test(file));
+
+export async function preview(root, input, { update = false } = {}) {
+  if (update && input !== undefined) throw new Error('Update uses the installed project configuration');
   const installed = await readOptional(root, 'broke-harness.config.json');
+  const previousText = await readOptional(root, manifestPath);
+  const previous = previousText === null ? null : JSON.parse(previousText);
+  if (update && (installed === null || previous?.schemaVersion !== 1 || !previous.context || !Array.isArray(previous.mutableFiles) || !previous.files || typeof previous.files !== 'object' || Array.isArray(previous.files))) {
+    throw new Error('Update requires an installed harness with a supported manifest and configuration');
+  }
   const config = resolveConfiguration(input ?? (installed === null ? {} : JSON.parse(installed)));
   const profile = await inspect(root, config);
-  const previousText = await readOptional(root, '.broke-harness/manifest.json');
-  const previous = previousText === null ? null : JSON.parse(previousText);
   if (!previous && config.bootstrap === 'project') {
     if (profile.kind !== 'new-project') throw new Error('Existing projects receive harness structure only; full bootstrap is refused');
     if (!profile.hasRootInstructions || !profile.hasRootArchitecture) throw new Error('Full bootstrap requires AGENT.md (or AGENTS.md) and ARCHITECTURE.md');
@@ -26,7 +47,8 @@ export async function preview(root, input) {
     for (const name of Object.keys(pkg.scripts ?? {}).sort()) if (/^(test|lint|typecheck|build|check)(:.*)?$/.test(name)) initialCommands.push({ command: `npm run ${name}`, cwd: file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '.', source: file.path, confidence: 'authored scaffold; not executed' });
   }
   const context = previous?.context ?? { sources: profile.sources.map(s => ({ path: s.path })), pathOwnership: profile.pathOwnership, commands: initialCommands, documentation: profile.documentation };
-  const files = await render(config, { ...profile, ...context });
+  const files = await render(config, previous && input === undefined ? null : { ...profile, ...context });
+  if (previous && installed !== null && input === undefined) files.set('broke-harness.config.json', installed);
   const mutableFiles = previous?.mutableFiles ?? [...new Set([...config.project.documentation.map(f => f.path), ...config.project.scaffold.map(f => f.path), '.broke-harness/PROJECT.md', ...(!profile.documentation.includes('docs/INDEX.md') ? ['docs/INDEX.md'] : [])])];
   // Generated project files belong to the user after bootstrap. Reinstallation never resets them.
   if (previous) for (const name of mutableFiles) {
@@ -41,14 +63,20 @@ export async function preview(root, input) {
   const operations = [];
   for (const [file, after] of [...files].sort(([a],[b]) => a.localeCompare(b))) {
     const before = await readOptional(root, file);
-    const action = before === after ? 'skip' : before === null ? 'create' : file === '.gitignore' ? 'append' : 'conflict';
-    operations.push({ path: file, action, beforeHash: before === null ? null : hash(before), afterHash: hash(after), diff: diff(file, before, after), content: after });
+    const priorHash = previous?.files?.[file];
+    let action = before === after ? 'skip' : before === null ? 'create' : file === '.gitignore' ? 'append' : 'conflict';
+    if (update && action === 'conflict' && !mutableFiles.includes(file) && priorHash === hash(before)) action = 'replace';
+    operations.push(operation(file, before, after, action));
   }
-  const manifest = { schemaVersion: 1, version: '0.2.0', context, mutableFiles, provenance: 'Adapted from supplied reference-implementation; original fingerprint domain retained. No upstream license grant supplied.', files: { ...Object.fromEntries(mutableFiles.map(name => [name, null])), ...Object.fromEntries(operations.map(o => [o.path, mutableFiles.includes(o.path) ? null : o.afterHash])) } };
-  const manifestPath = '.broke-harness/manifest.json';
-  const before = await readOptional(root, manifestPath);
+  if (update) for (const [file, priorHash] of Object.entries(previous.files)) {
+    if (files.has(file) || !managedPath(file) || mutableFiles.includes(file) || typeof priorHash !== 'string') continue;
+    const before = await readOptional(root, file);
+    if (before !== null) operations.push(operation(file, before, null, priorHash === hash(before) ? 'remove' : 'conflict'));
+  }
+  const manifest = { schemaVersion: 1, version, context, mutableFiles, provenance: 'Adapted from supplied reference-implementation; original fingerprint domain retained. No upstream license grant supplied.', files: { ...Object.fromEntries(mutableFiles.map(name => [name, null])), ...Object.fromEntries(operations.filter(o => o.content !== null).map(o => [o.path, mutableFiles.includes(o.path) ? null : o.afterHash])) } };
+  const before = previousText;
   const after = json(manifest);
-  operations.push({ path: manifestPath, action: before === after ? 'skip' : before === null ? 'create' : 'conflict', beforeHash: before === null ? null : hash(before), afterHash: hash(after), diff: diff(manifestPath, before, after), content: after });
+  operations.push(operation(manifestPath, before, after, before === after ? 'skip' : before === null ? 'create' : update ? 'replace' : 'conflict'));
   const conflicts = operations.filter(o => o.action === 'conflict').map(o => o.path);
   if (config.runtime === 'opencode') for (const name of Object.values(config.roles).map(r => r.agent).concat('broke-orchestrator','broke-docs')) {
     for (const folder of ['agents','agent']) for (const extension of ['md','json']) {
@@ -64,7 +92,7 @@ export async function preview(root, input) {
     }
   }
   const result = { schemaVersion: 1, root, runtime: config.runtime, bootstrap: config.bootstrap, roles: config.roles, profile, conflicts, operations, preserved: ['AGENTS.md','AGENT.md','ARCHITECTURE.md','opencode.json','opencode.jsonc','.opencode/opencode.jsonc'], warnings: ['Project-specific generated files are editable after bootstrap; existing project files are never overwritten.', 'Establish a user-created clean committed baseline before starting the Git-based lifecycle. Final completion approval authorizes the gate, archival and a scoped local commit; Git initialization, branches and pushes remain with the user.', ...(config.runtime === 'opencode' ? ['Review the role overlay and validate live OpenCode provider/model availability.'] : ['Portable commands use the chosen agent\'s existing tools and permissions; no runtime sandbox or model is installed.'])] };
-  return { ...result, approval: hash(json(result)) };
+  return { ...result, approval: hash(json({ ...result, update })) };
 }
 export async function apply(root, approved, input) {
   const plan = await preview(root, input);
@@ -96,5 +124,73 @@ export async function apply(root, approved, input) {
     for (const name of created.reverse()) await unlink(await safePath(root, name));
     throw new Error(`Installation stopped: ${e.message}. Any approved .gitignore append and empty directories may remain; inspect before retrying.`);
   }
-  return { version: '0.2.0', created: plan.operations.filter(o => o.action === 'create').map(o => o.path), modified: plan.operations.filter(o => o.action === 'append').map(o => o.path), skipped: plan.operations.filter(o => o.action === 'skip').map(o => o.path), warnings: plan.warnings };
+  return { version, created: plan.operations.filter(o => o.action === 'create').map(o => o.path), modified: plan.operations.filter(o => o.action === 'append').map(o => o.path), skipped: plan.operations.filter(o => o.action === 'skip').map(o => o.path), warnings: plan.warnings };
+}
+
+export async function upgrade(root, approved) {
+  const plan = await preview(root, undefined, { update: true });
+  if (plan.approval !== approved) throw new Error('Approval hash does not match current update preview; rerun --dry-run');
+  if (plan.conflicts.length) throw new Error(`Update conflicts: ${plan.conflicts.join(', ')}`);
+  const lockPath = await safePath(root, '.broke-harness/update.lock');
+  const lock = await open(lockPath, 'wx');
+  const applied = [];
+  async function change(op, beforeHash, content, mode) {
+    const file = await safePath(root, op.path);
+    const current = await readOptional(root, op.path);
+    if (contentHash(current) !== beforeHash) throw new Error(`Concurrent change: ${op.path}`);
+    const beforeMode = current === null ? undefined : (await lstat(file)).mode;
+    if (content === null) {
+      await unlink(file);
+    } else if (current === null) {
+      await mkdir(path.dirname(file), { recursive: true });
+      await safePath(root, op.path);
+      const created = await open(file, 'wx', mode);
+      try {
+        try { await created.writeFile(content); }
+        finally { await created.close(); }
+      } catch (error) {
+        await unlink(file);
+        throw error;
+      }
+    } else {
+      const temp = `${file}.broke-update-${randomUUID()}`;
+      const pending = await open(temp, 'wx', mode ?? beforeMode);
+      try {
+        try { await pending.writeFile(content); }
+        finally { await pending.close(); }
+        if (contentHash(await readOptional(root, op.path)) !== beforeHash) throw new Error(`Concurrent change: ${op.path}`);
+        await rename(temp, file);
+      } finally {
+        await unlink(temp).catch(error => { if (error.code !== 'ENOENT') throw error; });
+      }
+    }
+    return [current, beforeMode];
+  }
+  try {
+    for (const op of plan.operations) {
+      if (contentHash(await readOptional(root, op.path)) !== op.beforeHash) throw new Error(`Concurrent change: ${op.path}`);
+    }
+    for (const op of plan.operations) {
+      if (op.action === 'skip') continue;
+      applied.push([op, await change(op, op.beforeHash, op.content)]);
+    }
+  } catch (error) {
+    const failed = [];
+    for (const [op, original] of applied.reverse()) {
+      try { await change(op, op.afterHash, ...original); }
+      catch { failed.push(op.path); }
+    }
+    if (failed.length) throw new Error(`Update stopped: ${error.message}. Review these paths before retrying: ${failed.join(', ')}`);
+    throw error;
+  } finally {
+    await lock.close();
+    await unlink(lockPath);
+  }
+  return {
+    version,
+    created: plan.operations.filter(op => op.action === 'create').map(op => op.path),
+    modified: plan.operations.filter(op => ['append', 'replace'].includes(op.action)).map(op => op.path),
+    removed: plan.operations.filter(op => op.action === 'remove').map(op => op.path),
+    skipped: plan.operations.filter(op => op.action === 'skip').map(op => op.path),
+  };
 }

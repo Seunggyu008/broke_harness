@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { workspace, hash, readOptional, json, git } from '../lib/safe-files.mjs';
 import { resolveConfiguration } from '../lib/configuration.mjs';
 import { renderAgents } from '../adapters/opencode/render.mjs';
-import { preview } from '../lib/manifest.mjs';
+import { preview, version } from '../lib/manifest.mjs';
 import { argumentsFor, cli } from '../lib/cli.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ export async function doctor(root, { tests = false } = {}) {
   const errors = [], warnings = [];
   if (Number(process.versions.node.split('.')[0]) < 22) errors.push('Node.js 22+ required');
   const manifest = JSON.parse(await readOptional(root, '.broke-harness/manifest.json'));
-  if (manifest?.schemaVersion !== 1 || manifest.version !== '0.2.0' || !manifest.files || typeof manifest.files !== 'object') throw new Error('Unsupported or missing installation manifest');
+  if (manifest?.schemaVersion !== 1 || manifest.version !== version || !manifest.files || typeof manifest.files !== 'object') throw new Error('Unsupported or missing installation manifest; run broke_harness update for an older installation');
   const config = resolveConfiguration(JSON.parse(await readOptional(root, 'broke-harness.config.json')));
   for (const [file, expected] of Object.entries(manifest.files)) {
     const content = await readOptional(root, file);

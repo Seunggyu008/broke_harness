@@ -1,32 +1,42 @@
-# broke-harness 0.2
+# broke-harness 0.3
 
-A project-aware skill that creates a development harness from AGENT.md (or AGENTS.md) and ARCHITECTURE.md. A new workspace offers full project bootstrap plus harness, or harness only. Existing projects receive harness only. /update-docs separately cleans and updates documentation when the user requests it.
+A project-aware skill that creates and upgrades a development harness. Initialization uses AGENT.md (or AGENTS.md) and ARCHITECTURE.md to tailor the harness and optionally scaffold a new project.
 
 ## Use the skill
 
-Register the bootstrap command once, then use it from your agent:
+Enter a command in your agent conversation.
 
 ```text
-/harness-bootstrap "C:/path/to/my project"
+broke_harness init "C:/path/to/my project"
+broke_harness update "C:/path/to/my project"
+broke_harness
 ```
 
-The bootstrap command is registered independently of a target project's harness, so it is available before that project has any workflow files. It reads AGENT.md and ARCHITECTURE.md, asks about full bootstrap for a new workspace, and adds only the harness to an existing project. The path may contain spaces; no Git operations are performed.
+- `init` runs project-aware setup. It offers full project scaffolding for a new workspace and sets up the harness in an existing project.
+- `update` refreshes harness files from the loaded skill bundle. It previews changes, preserves project code, configuration, docs and plans, and reports edits to managed files that require reconciliation.
+- Bare `broke_harness` enables shorthand for the rest of the conversation. Use commands like `write-plan`, `start-plan --plan docs/exec-plans/active/example.md`, `update-docs`, or `update` directly.
 
-For OpenCode, register into its user configuration folder (normally `~/.config/opencode`):
+Omit the path to use the selected workspace. Before activating shorthand, use the prefix with a workflow command, such as `broke_harness write-plan`. In Codex, use `$broke-harness` to select the skill explicitly. In OpenCode, the registered entry point is `/broke_harness`.
+
+### Register the entry point
+
+Preview a new registration in your agent configuration, then apply it with the returned approval hash.
 
 ```text
-node skill/broke-harness/scripts/register-bootstrap.mjs --target <opencode-config-folder> --runtime opencode --dry-run
-node skill/broke-harness/scripts/register-bootstrap.mjs --target <same-folder> --runtime opencode --approve <preview.approval>
+node skill/broke-harness/scripts/register.mjs --target <agent-config-folder> --runtime portable --dry-run
+node skill/broke-harness/scripts/register.mjs --target <same-folder> --runtime portable --approve <preview.approval>
 ```
 
-For portable skill discovery, use `--runtime portable` and point --target at the agent configuration folder containing its skills/ directory (for example `~/.agents`). The registered skill is named harness-bootstrap; use the host's explicit skill syntax if it does not expose skills as slash commands. In Codex, invoke `$harness-bootstrap "C:/path/to/my project"` or select it through /skills. See the [official skill invocation documentation](https://learn.chatgpt.com/docs/build-skills#how-codex-uses-skills). Restart/reload the agent after registration. Registration copies a self-contained bundle and preserves existing configuration; conflicting commands/skills refuse replacement. Later source updates require reviewing registration conflicts rather than silently replacing an installed copy.
+Point `--target` at the folder containing your agent's `skills/` directory, such as `~/.agents` for Codex. For OpenCode, use `--runtime opencode` and its user configuration folder. Reload the host after registration. Registration reports collisions with existing skill or command files. If you already have an older copy of the skill, update that copy through your usual skill installation process, or load the current `skill/broke-harness/SKILL.md` directly.
 
-You can also load skill/broke-harness/SKILL.md directly and select the target folder. The agent reads the project sources, inspects existing code, asks about full bootstrap only for a new workspace, and authors project-specific documentation and optional initial scaffold. The deterministic installer previews/validates/applies those files without overwriting existing project content.
+### Run the project helpers directly
 
 ```text
 node <skill>/scripts/inspect.mjs --target <absolute-folder>
 node <skill>/scripts/install.mjs --target <absolute-folder> --config <absolute-input.json> --dry-run
 node <skill>/scripts/install.mjs --target <absolute-folder> --config <same-input.json> --approve <preview.approval>
+node <skill>/scripts/update.mjs --target <absolute-folder> --dry-run
+node <skill>/scripts/update.mjs --target <absolute-folder> --approve <preview.approval>
 node <skill>/scripts/doctor.mjs --target <absolute-folder> --tests
 ```
 
@@ -52,4 +62,4 @@ npm test
 npm run test:reference
 ```
 
-Tests exercise the completion gate and OpenCode hooks in disposable repositories with synthetic audit results. See VALIDATION.md, ARCHITECTURE.md and reference-inventory.md. Generated project docs and scaffold become owner-editable. Immutable runtime assets remain hash-checked. Existing installations require manual reconciliation of the updated harness files and configuration. Windows is the exercised platform. No upstream reference license was supplied.
+Tests exercise installation, upgrades, the completion gate and OpenCode hooks in disposable repositories with synthetic audit results. See VALIDATION.md, ARCHITECTURE.md and reference-inventory.md. Windows is the exercised platform. No upstream reference license was supplied.

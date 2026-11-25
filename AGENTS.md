@@ -7,6 +7,7 @@ Build a portable Agent Skill matching the user's project-aware bootstrap and exe
 - Read root AGENT.md or AGENTS.md and ARCHITECTURE.md, accepting case variants.
 - If only those documents and incidental workspace metadata exist, ask whether to bootstrap the full project plus harness. Yes authorizes an appropriate initial project scaffold; no creates harness only.
 - Existing projects receive harness structure and relevant documentation only; never regenerate their application.
+- Use `broke_harness init` for setup, `broke_harness update` for manifest-backed project harness upgrades, and bare `broke_harness` to activate workflow shorthand for the current agent conversation.
 - Generate project-specific structure/docs from those source documents and repository evidence. Keep application-specific mePort rules out of the bundle.
 - Default to portable commands with the user's chosen agent; OpenCode is an optional adapter. Do not claim untested native runtime integration or sandboxing.
 - The user or agent drafts an active plan for user approval. /start-plan implements it, verifies it, delegates a fresh read-only audit and asks about completion after a clean result. Never fabricate independent review.
