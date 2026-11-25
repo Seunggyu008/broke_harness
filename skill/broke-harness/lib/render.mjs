@@ -24,7 +24,9 @@ export async function render(config, profile) {
     const name = path.basename(file, '.md');
     files.set(`.agents/skills/${name}/SKILL.md`, `---\nname: ${name}\ndescription: ${content.split('\n')[0].replace(/^# /, '')}\n---\n\n${content}`);
   }
-  files.set('.agents/skills/update-docs/agents/openai.yaml', 'policy:\n  allow_implicit_invocation: false\n');
+  for (const name of ['update-docs', 'commit']) {
+    files.set(`.agents/skills/${name}/agents/openai.yaml`, 'policy:\n  allow_implicit_invocation: false\n');
+  }
   if (profile) {
     const project = config.project;
     const lines = ['# Project workflow context', '', project.summary || 'Read the source documents below for project scope and architecture.', '', '## Sources', '', ...profile.sources.map(s => `- ${s.path}`), '', '## Ownership', '', ...profile.pathOwnership.map(o => `- ${o.directory}: ${o.instructions}`), '', '## Declared checks (not executed)', '', ...profile.commands.map(c => `- ${c.command} (working directory: ${c.cwd})`), '', 'Use docs/INDEX.md to select relevant documentation. Final completion approval authorizes the gate, archival and a scoped local commit. Git initialization, the initial baseline commit, branches and pushes remain with the user.'];
@@ -42,7 +44,8 @@ export async function render(config, profile) {
   for (const [file, text] of files) if (file.startsWith('.opencode/commands/')) {
     const role = file.endsWith('write-plan.md') ? 'plan' : file.endsWith('start-plan-audit.md') ? 'audit' : 'implement';
     const selected = config.roles[role];
-    let next = text.replace(/^agent: .*$/m, `agent: ${file.endsWith('/start-plan.md') ? 'broke-orchestrator' : file.endsWith('/update-docs.md') ? 'broke-docs' : selected.agent}`).replace(/^model: .*$/m, `model: ${selected.provider}/${selected.model}`);
+    const agent = file.endsWith('/start-plan.md') || file.endsWith('/commit.md') ? 'broke-orchestrator' : file.endsWith('/update-docs.md') ? 'broke-docs' : selected.agent;
+    let next = text.replace(/^agent: .*$/m, `agent: ${agent}`).replace(/^model: .*$/m, `model: ${selected.provider}/${selected.model}`);
     next = next.replaceAll('`audit-pro`', `\`${config.roles.audit.agent}\``).replaceAll('`fix-pro`', `\`${config.roles.fix.agent}\``);
     next = next.replaceAll('the configured implement agent', `\`${config.roles.implement.agent}\``);
     next = next.replaceAll('Read `docs/INDEX.md`.', 'Read the existing documentation index when present.').replaceAll('Read `AGENTS.md`', 'Read the existing `AGENTS.md` (or `AGENT.md`) when present');

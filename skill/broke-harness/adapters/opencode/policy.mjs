@@ -6,6 +6,7 @@ import { safePath, relativePath, secretPath, json } from '../../lib/safe-files.m
 import { matchesGlob, parseHarnessContract, parseAcceptanceCriteria } from '../../../tools/harness/run.mjs';
 import { getHeadRevision, getChangedFiles, computeChangeFingerprint } from '../../../tools/harness/change-state.mjs';
 import { checkPlanState } from '../../../tools/exec-plans/plan-state.mjs';
+import { isPlanCommitSubject } from '../../../tools/exec-plans/commit.mjs';
 import { validateCompletionArtifacts, validatePassingHarness } from '../../../tools/exec-plans/complete-plan.mjs';
 
 const READ = new Set(['read','glob','grep','list']);
@@ -119,7 +120,8 @@ export async function authorize({ root, config, role, tool, args }) {
       try { state = await load(root, stateFile); } catch (e) { if (e.code !== 'ENOENT') throw e; }
       const head = await getHeadRevision(root);
       if (!state || state.planPath !== plan.planPath || state.head !== head) state = { planPath: plan.planPath, head, attempts: 0 };
-      if (state.attempts >= 3) throw new Error('Three combined fix attempts exhausted; owner direction required');
+      const limit = config.policy.maxCombinedFixAttempts;
+      if (state.attempts >= limit) throw new Error(`All ${limit} combined fix attempts exhausted; owner direction required`);
       state.attempts++;
       await mkdir(await safePath(root, '.tmp'), { recursive: true });
       await writeFile(await safePath(root, stateFile), json(state));
@@ -132,6 +134,9 @@ export async function authorize({ root, config, role, tool, args }) {
     // Strict grammar deliberately excludes shell operators, substitutions and arbitrary verify strings.
     if (typeof command !== 'string' || /[\r\n;&|`$<>]/.test(command)) throw new Error('Arbitrary shell denied');
     const planPattern = 'docs/exec-plans/active/[a-zA-Z0-9._-]+\\.md';
+    if (command === 'node tools/exec-plans/commit.mjs --inspect') return;
+    const commit = command.match(/^node tools\/exec-plans\/commit\.mjs --message "([^"]+)"$/);
+    if (commit && isPlanCommitSubject(commit[1])) return;
     if (new RegExp(`^node tools/exec-plans/start-plan\\.mjs ${planPattern}$`).test(command) || new RegExp(`^node tools/harness/run\\.mjs --plan ${planPattern}$`).test(command)) return;
     if (new RegExp(`^node tools/exec-plans/complete-plan\\.mjs ${planPattern} --harness \\.tmp/harness-report\\.json --audit \\.tmp/audit-result\\.json --approve sha256:[a-f0-9]{64}(?: --commit-message "[\\p{L}\\p{N}][\\p{L}\\p{N} .,():/_-]{0,119}")?$`, 'u').test(command)) return;
     throw new Error('Only exact canonical lifecycle commands are permitted');

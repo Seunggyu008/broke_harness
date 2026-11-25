@@ -114,7 +114,10 @@ test('role overrides render consistently; unsupported runtime, capabilities and 
   const roles = Object.fromEntries(['plan','implement','audit','fix'].map(name => [name, { agent: 'custom-' + name, provider: 'example', model: 'selected-' + name, temperature: 0.2, steps: 20 }]));
   await install(f, { roles });
   const overlay = JSON.parse(await f.read('.broke-harness/opencode.json'));
-  for (const [name,role] of Object.entries(roles)) assert.equal(overlay.agent[role.agent].model, `example/selected-${name}`);
+  for (const [name,role] of Object.entries(roles)) {
+    assert.equal(overlay.agent[role.agent].model, `example/selected-${name}`);
+    assert.equal(overlay.agent[role.agent].steps, 20);
+  }
   assert.match(await f.read('.opencode/commands/write-plan.md'), /agent: custom-plan\r?\nmodel: example\/selected-plan/);
   assert.match(await f.read('.opencode/commands/start-plan-audit.md'), /agent: custom-audit/);
   assert.match(await f.read('.opencode/commands/start-plan.md'), /agent: broke-orchestrator/);
@@ -241,7 +244,11 @@ test('actual OpenCode plugin hook denies audit writes/shell/MCP/delegation and e
   const invoke = (tool,args,id='call') => hooks['tool.execute.before']({sessionID:'orchestrator',tool,callID:id},{args});
   await assert.rejects(invoke('bash',{command:'git diff; echo bad'}),/Arbitrary shell/);
   await assert.rejects(invoke('task',{subagent_type:config.roles.audit.agent,task_id:'existing'}),/fresh task/);
-  await f.write('src/main.mjs','export const value = 2;\n'); await f.write('docs/API.md','Value: 2\n');
+  await f.write('src/main.mjs','export const value = ;\n'); await f.write('docs/API.md','Value: 2\n');
+  f.fail('tools/harness/run.mjs','--plan',PLAN);
+  const fix = {subagent_type:config.roles.fix.agent};
+  await invoke('task',fix);
+  await f.write('src/main.mjs','export const value = 2;\n');
   f.ok('tools/harness/run.mjs','--plan',PLAN);
   const args = {subagent_type:config.roles.audit.agent,prompt:'Independent fixture audit',description:'fixture'};
   await hooks['tool.execute.before']({sessionID:'implement',tool:'write'},{args:{filePath:'src/main.mjs'}});
@@ -263,11 +270,11 @@ test('actual OpenCode plugin hook denies audit writes/shell/MCP/delegation and e
   await auditResponse({...fixable,feedbackAssessment:[{point:'Unproven claim',assessment:'unverified',evidence:'No confirming evidence'}]},'feedback');
   await assert.rejects(invoke('task',{subagent_type:config.roles.fix.agent}),/Entire external feedback batch paused/);
   await auditResponse(fixable,'owner-resolved-feedback');
-  for (let i=0;i<3;i++) await invoke('task',{subagent_type:config.roles.fix.agent});
-  await assert.rejects(invoke('task',{subagent_type:config.roles.fix.agent}),/Three combined fix attempts/);
+  for (let attempt = 2; attempt <= 5; attempt++) await invoke('task',fix);
+  await assert.rejects(invoke('task',fix),/All 5 combined fix attempts/);
   const freshHooks = await plugin({directory:f.root,client:{}});
   await freshHooks['chat.params']({sessionID:'resumed',agent:'broke-orchestrator',model:model('implement')});
-  await assert.rejects(freshHooks['tool.execute.before']({sessionID:'resumed',tool:'task'},{args:{subagent_type:config.roles.fix.agent}}),/Three combined fix attempts/);
+  await assert.rejects(freshHooks['tool.execute.before']({sessionID:'resumed',tool:'task'},{args:fix}),/All 5 combined fix attempts/);
 
   await hooks['chat.params']({sessionID:'fix',agent:config.roles.fix.agent,model:model('fix')});
   await hooks['tool.execute.before']({sessionID:'fix',tool:'write'},{args:{filePath:'src/main.mjs'}});

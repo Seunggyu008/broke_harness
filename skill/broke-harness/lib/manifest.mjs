@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { inspect } from './profile.mjs';
 import { render } from './render.mjs';
-import { resolveConfiguration } from './configuration.mjs';
+import { defaults, resolveConfiguration } from './configuration.mjs';
 import { hash, json, readOptional, safePath, parseJSONC } from './safe-files.mjs';
 
 const manifestPath = '.broke-harness/manifest.json';
@@ -34,7 +34,16 @@ export async function preview(root, input, { update = false } = {}) {
   if (update && (installed === null || previous?.schemaVersion !== 1 || !previous.context || !Array.isArray(previous.mutableFiles) || !previous.files || typeof previous.files !== 'object' || Array.isArray(previous.files))) {
     throw new Error('Update requires an installed harness with a supported manifest and configuration');
   }
-  const config = resolveConfiguration(input ?? (installed === null ? {} : JSON.parse(installed)));
+  const installedConfig = installed === null ? {} : JSON.parse(installed);
+  let configText = installed;
+  if (update && installedConfig.policy?.maxCombinedFixAttempts === 3) {
+    const limit = defaults.policy.maxCombinedFixAttempts;
+    installedConfig.policy.maxCombinedFixAttempts = limit;
+    configText = installed.replace(/("maxCombinedFixAttempts"\s*:\s*)3(?=\s*[,}])/g, (_, key) => key + limit);
+    // Re-serialize if the old number or key used an alternate JSON spelling.
+    if (JSON.parse(configText).policy.maxCombinedFixAttempts !== limit) configText = json(installedConfig);
+  }
+  const config = resolveConfiguration(input ?? installedConfig);
   const profile = await inspect(root, config);
   if (!previous && config.bootstrap === 'project') {
     if (profile.kind !== 'new-project') throw new Error('Existing projects receive harness structure only; full bootstrap is refused');
@@ -48,7 +57,7 @@ export async function preview(root, input, { update = false } = {}) {
   }
   const context = previous?.context ?? { sources: profile.sources.map(s => ({ path: s.path })), pathOwnership: profile.pathOwnership, commands: initialCommands, documentation: profile.documentation };
   const files = await render(config, previous && input === undefined ? null : { ...profile, ...context });
-  if (previous && installed !== null && input === undefined) files.set('broke-harness.config.json', installed);
+  if (previous && configText !== null && input === undefined) files.set('broke-harness.config.json', configText);
   const mutableFiles = previous?.mutableFiles ?? [...new Set([...config.project.documentation.map(f => f.path), ...config.project.scaffold.map(f => f.path), '.broke-harness/PROJECT.md', ...(!profile.documentation.includes('docs/INDEX.md') ? ['docs/INDEX.md'] : [])])];
   // Generated project files belong to the user after bootstrap. Reinstallation never resets them.
   if (previous) for (const name of mutableFiles) {
@@ -65,6 +74,7 @@ export async function preview(root, input, { update = false } = {}) {
     const before = await readOptional(root, file);
     const priorHash = previous?.files?.[file];
     let action = before === after ? 'skip' : before === null ? 'create' : file === '.gitignore' ? 'append' : 'conflict';
+    if (update && file === 'broke-harness.config.json' && before === installed && configText !== installed) action = 'replace';
     if (update && action === 'conflict' && !mutableFiles.includes(file) && priorHash === hash(before)) action = 'replace';
     operations.push(operation(file, before, after, action));
   }

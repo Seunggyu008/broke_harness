@@ -76,10 +76,12 @@ test('a docs-only folder is new, exposes actual source contents, and installs ha
   await assert.rejects(lstat(path.join(f.root, '.git')), {code:'ENOENT'});
   await assert.rejects(lstat(path.join(f.root, 'src')), {code:'ENOENT'});
   await assert.rejects(lstat(path.join(f.root, '.opencode')), {code:'ENOENT'});
-  for (const name of ['write-plan','start-plan','implement-plan','start-plan-audit','update-docs']) assert.ok((await f.read(`.agents/skills/${name}/SKILL.md`)).startsWith('---\n'));
+  for (const name of ['write-plan','start-plan','implement-plan','start-plan-audit','commit','update-docs']) assert.ok((await f.read(`.agents/skills/${name}/SKILL.md`)).startsWith('---\n'));
+  assert.match(await f.read('.agents/skills/commit/agents/openai.yaml'), /allow_implicit_invocation: false/);
   const start = await f.read('.broke-harness/commands/start-plan.md');
   assert.match(start, /After every passing harness, delegate the audit contract/);
   assert.match(start, /Continue only with a clean audit/);
+  assert.match(start, /five total fix attempts/);
   assert.equal(JSON.parse(await f.read('broke-harness.config.json')).policy.requireIndependentAudit,true);
   assert.throws(() => resolveConfiguration({policy:{requireIndependentAudit:false}}), /Invariant policy cannot be disabled: requireIndependentAudit/);
   const health = await doctor(f.root);
@@ -144,7 +146,7 @@ test('update refreshes an older installation, preserves project assets and refus
     return JSON.parse(result.stdout);
   };
   assert.match(run('--dry-run').stderr, /requires an installed harness/);
-  const config = { ...blueprint, runtime: 'opencode' };
+  const config = { ...blueprint, runtime: 'opencode', roles: { fix: { steps: 170 } } };
   const initial = await preview(f.root, config);
   await apply(f.root, initial.approval, config);
 
@@ -160,9 +162,12 @@ test('update refreshes an older installation, preserves project assets and refus
     'docs/STORAGE.md': '# Owner documentation\n',
     [PLAN]: plan,
     'docs/exec-plans/archive/old.md': '# Archived plan\n',
-    'broke-harness.config.json': (await f.read('broke-harness.config.json')) + '\n',
   };
   for (const [file, content] of Object.entries(ownerFiles)) await f.write(file, content);
+  const configFile = 'broke-harness.config.json';
+  const migratedConfig = (await f.read(configFile)) + '\n';
+  const oldConfig = migratedConfig.replace('"maxCombinedFixAttempts": 5', '"maxCombinedFixAttempts": 3');
+  await f.write(configFile, oldConfig);
   for (const file of [runtimeFile, obsoleteFile]) {
     await f.write(file, '// Prior release\n');
     manifest.files[file] = hash('// Prior release\n');
@@ -175,6 +180,8 @@ test('update refreshes an older installation, preserves project assets and refus
   assert.equal(actions[runtimeFile], 'replace');
   assert.equal(actions[obsoleteFile], 'remove');
   assert.equal(actions[missingFile], 'create');
+  assert.equal(actions[configFile], 'replace');
+  assert.equal(await f.read(configFile), oldConfig);
   assert.equal(await f.read(runtimeFile), '// Prior release\n');
   await f.write(runtimeFile, '// Local customization\n');
   assert.match(run('--approve', proposed.approval).stderr, /does not match/);
@@ -188,6 +195,9 @@ test('update refreshes an older installation, preserves project assets and refus
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout).removed, [obsoleteFile]);
   assert.equal(await f.read(runtimeFile), originalRuntime);
+  assert.equal(await f.read(configFile), migratedConfig);
+  const { agent } = JSON.parse(await f.read('.broke-harness/opencode.json'));
+  assert.equal(agent['broke-fix'].steps, 170);
   assert.equal(JSON.parse(await f.read(manifestPath)).version, version);
   await assert.rejects(lstat(path.join(f.root, obsoleteFile)), { code: 'ENOENT' });
   await assert.rejects(lstat(path.join(f.root, '.git')), { code: 'ENOENT' });
@@ -349,6 +359,11 @@ test('OpenCode docs maintenance allows docs-only edits and patches, denies code/
   const {default: plugin} = await import(pathToFileURL(path.join(f.root,'.opencode/plugins/broke-harness.js')));
   const hooks = await plugin({directory:f.root,client:{}});
   const config = JSON.parse(await f.read('broke-harness.config.json'));
+  const { agent } = JSON.parse(await f.read('.broke-harness/opencode.json'));
+  assert.equal(agent[config.roles.implement.agent].steps, 150);
+  assert.equal(agent[config.roles.fix.agent].steps, 150);
+  assert.equal(agent[config.roles.audit.agent].steps, 100);
+  assert.match(await f.read('.opencode/commands/commit.md'), /agent: broke-orchestrator/);
   const effective = {agent:{build:{model:'owner/model',mode:'primary'}}};
   await hooks.config(effective); assert.equal(effective.agent.build.model,'owner/model');
   await assert.rejects(hooks.config({agent:{'broke-orchestrator':{prompt:'owner role'}}}), /Existing agent conflicts/);
@@ -373,7 +388,47 @@ test('OpenCode docs maintenance allows docs-only edits and patches, denies code/
     await assert.rejects(invokeCompletion(command + ` --commit-message "${message}"`));
   }
   await assert.rejects(invokeCompletion('git commit -am "unscoped changes"'));
+  const commit = 'node tools/exec-plans/commit.mjs';
+  await invokeCompletion(commit + ' --inspect');
+  await invokeCompletion(commit + ' --message "refactor/Simplify task storage"');
+  for (const subject of ['fix: preserve task order', 'fix/$(whoami)', 'fix/%PATH%']) {
+    await assert.rejects(invokeCompletion(commit + ` --message "${subject}"`));
+  }
   await assert.rejects(lstat(path.join(f.root,'src')), {code:'ENOENT'});
+});
+
+test('standalone commit records a typed subject and commits only staged content outside active execution', async t => {
+  const f = await folder(t);
+  const p = await preview(f.root, blueprint);
+  await apply(f.root, p.approval, blueprint);
+  f.git('init', '-q');
+  f.git('config', 'user.name', 'Fixture');
+  f.git('config', 'user.email', 'fixture@example.invalid');
+  f.commit();
+
+  const helper = 'tools/exec-plans/commit.mjs';
+  assert.match(f.run(helper, '--inspect').stderr, /Nothing is staged/);
+  await f.write('src/main.mjs', 'export const tasks = ["staged"];\n');
+  f.git('add', 'src/main.mjs');
+  await f.write('src/main.mjs', 'export const tasks = ["unstaged"];\n');
+  await f.write('notes.txt', 'Untracked notes\n');
+  const inspected = f.ok(helper, '--inspect').stdout;
+  assert.match(inspected, /\["staged"\]/);
+  assert.doesNotMatch(inspected, /unstaged|Untracked/);
+  const baseline = f.git('rev-parse', 'HEAD');
+  assert.match(f.run(helper, '--message', 'fix: preserve task order').stderr, /concise summary/);
+  await f.write(PLAN, plan.replace('approved', 'in-progress'));
+  assert.match(f.run(helper, '--message', 'fix/Preserve task order').stderr, /Complete it through \/start-plan/);
+  assert.equal(f.git('rev-parse', 'HEAD'), baseline);
+  await rm(path.join(f.root, PLAN));
+
+  const message = 'fix/Preserve task order';
+  const result = f.ok(helper, '--message', message).stdout.trim();
+  assert.equal(result, f.git('log', '-1', '--format=%H %s'));
+  assert.ok(result.endsWith(` ${message}`));
+  assert.equal(f.git('show', 'HEAD:src/main.mjs'), 'export const tasks = ["staged"];');
+  assert.match(await f.read('src/main.mjs'), /unstaged/);
+  assert.deepEqual(f.git('status', '--porcelain').split(/\r?\n/).map(line => line.trim()), ['M src/main.mjs', '?? notes.txt']);
 });
 
 test('JSONC role collisions are reported before install without false matches in strings or task permissions', async t => {

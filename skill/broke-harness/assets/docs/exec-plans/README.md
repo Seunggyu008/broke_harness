@@ -14,7 +14,7 @@ allowedPaths is the sole edit scope; prose does not expand it. verify is the ord
 
 ## Deterministic helpers
 
-Installation can precede Git. Before starting a real plan, the user initializes Git and commits the scaffold/harness as a clean baseline. Helpers never initialize, reset or push; only approved completion with --commit-message stages and commits. Starting approved work permits only the selected plan as an uncommitted file; resume permits scoped pending changes and rejects baseline/contract drift. Keep implementation uncommitted until archival so the complete diff remains visible. An earlier commit during execution needs explicit baseline reconciliation.
+Installation can precede Git. Before starting a real plan, the user initializes Git and commits the scaffold/harness as a clean baseline. Approved completion with --commit-message stages and commits plan changes. Outside an in-progress plan, `/commit [--plan <path>]` commits already staged changes with a subject such as `refactor/Simplify task storage`. Starting approved work permits only the selected plan as an uncommitted file; resume permits scoped pending changes and rejects baseline/contract drift. Keep implementation uncommitted until archival so the complete diff remains visible. An earlier commit during execution needs explicit baseline reconciliation.
 
 ```text
 node tools/exec-plans/start-plan.mjs docs/exec-plans/active/<file>.md

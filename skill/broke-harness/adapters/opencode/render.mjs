@@ -9,16 +9,16 @@ export function renderAgents(config) {
     agents[role.agent] = {
       description: `broke-harness ${name} role`, mode: name === 'plan' ? 'primary' : 'subagent',
       model: `${role.provider}/${role.model}`, temperature: role.temperature ?? 0.1,
-      steps: role.steps ?? ({ plan: 60, implement: 80, audit: 60, fix: 40 }[name]),
+      steps: role.steps ?? ({ plan: 60, implement: 150, audit: 100, fix: 150 }[name]),
       permission,
       prompt: name === 'audit' ? 'Independently audit the current passing harness in a fresh read-only task. Read .broke-harness/commands/start-plan-audit.md and return its exact structured JSON. Never delegate or edit.' : name === 'plan' ? 'Read .broke-harness/commands/write-plan.md and docs/exec-plans/TEMPLATE.md. Only draft plans may be edited.' : 'Read .broke-harness/commands/implement-plan.md. Edit only the pinned approved plan scope. Shell verification belongs to the orchestrator. Never edit harness infrastructure.',
     };
   }
   agents['broke-orchestrator'] = {
-    description: 'Coordinate plan implementation, verification, independent audit and completion approval', mode: 'primary',
+    description: 'Coordinate plan implementation, verification, independent audit and local commits', mode: 'primary',
     model: `${config.roles.implement.provider}/${config.roles.implement.model}`, temperature: 0.1,
     permission: { ...structuredClone(read), bash: 'ask', edit: { '*': 'deny', '.tmp/audit-result.json': 'allow' }, task: { '*': 'deny', ...Object.fromEntries(['implement','audit','fix'].map(r => [config.roles[r].agent, 'allow'])) }, question: 'allow' },
-    prompt: 'Read .broke-harness/commands/start-plan.md. Delegate application edits and fixes, run verification, and delegate a fresh independent audit after each passing harness. Persist the validated clean audit before asking the user to approve completion and a local commit. After unambiguous approval in a later user message, run the completion helper with both artifacts and a descriptive --commit-message unless the user requests archive only.',
+    prompt: 'For an explicit /commit invocation, read and follow .broke-harness/commands/commit.md. For plan execution, read .broke-harness/commands/start-plan.md. Delegate application edits and fixes, run verification, and delegate a fresh independent audit after each passing harness. Persist the validated clean audit before asking the user to approve completion and a local commit. After unambiguous approval in a later user message, run the completion helper with both artifacts and a descriptive --commit-message unless the user requests archive only.',
   };
   agents['broke-docs'] = {
     description: 'Update and clean project documentation when explicitly requested', mode: 'primary',
